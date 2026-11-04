@@ -1,5 +1,6 @@
 import {
   ClientPublicTestnet,
+  numToHex,
   type ClientBlock,
   type ClientBlockHeader,
   type Cell,
@@ -17,6 +18,7 @@ import {
   type Owner,
   type TransactionLike,
 } from "@ckb-ccc/shell";
+import { JsonRpcTransformers, type JsonRpcBlock } from "@ckb-ccc/shell/advanced";
 
 import { parseBlockNumber, parseHash32, type BlockNumber, type Hash32 } from "@ckb-automata/core";
 import type { AutomataMetrics, TelemetryRuntime } from "@ckb-automata/telemetry";
@@ -58,6 +60,9 @@ export interface CkbReadClient {
   getTipHeader(): Promise<ClientBlockHeader>;
   getIndexerTip(): Promise<CkbIndexerTip>;
   getBlockByNumber(blockNumber: NumLike): Promise<ClientBlock | undefined>;
+  getBlocksByNumber(
+    blockNumbers: readonly NumLike[],
+  ): Promise<readonly (ClientBlock | undefined)[]>;
   getBlockByHash(blockHash: HexLike): Promise<ClientBlock | undefined>;
   getCellLive(outPoint: OutPointLike): Promise<Cell | undefined>;
   findCellsPaged(
@@ -80,6 +85,7 @@ export interface CkbReadClient {
 const DEFAULT_TIMEOUT_MS = 2_000;
 const DEFAULT_SAFE_READ_ATTEMPTS = 2;
 const DEFAULT_RETRY_DELAY_MS = 25;
+const MAXIMUM_BLOCK_BATCH_SIZE = 128;
 
 function assertEndpoints(
   endpoints: readonly [string, ...string[]],
@@ -118,6 +124,36 @@ function record(value: unknown, name: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function batchResponse(value: unknown, count: number): readonly (ClientBlock | undefined)[] {
+  if (!Array.isArray(value) || value.length !== count) {
+    throw new TypeError("block batch response has an invalid length");
+  }
+  const byId = new Map<number, unknown>();
+  for (const item of value) {
+    const envelope = record(item, "block batch response item");
+    const id = envelope["id"];
+    if (
+      !Number.isSafeInteger(id) ||
+      Number(id) < 0 ||
+      Number(id) >= count ||
+      byId.has(Number(id))
+    ) {
+      throw new TypeError("block batch response has an invalid id");
+    }
+    if (envelope["jsonrpc"] !== "2.0" || "error" in envelope || !("result" in envelope)) {
+      throw new TypeError("block batch response item is invalid");
+    }
+    byId.set(Number(id), envelope["result"]);
+  }
+  return Object.freeze(
+    Array.from({ length: count }, (_, id) => {
+      if (!byId.has(id)) throw new TypeError("block batch response is incomplete");
+      const result = byId.get(id);
+      return result === null ? undefined : JsonRpcTransformers.blockTo(result as JsonRpcBlock);
+    }),
+  );
+}
+
 function delay(milliseconds: number): Promise<void> {
   return milliseconds === 0
     ? Promise.resolve()
@@ -130,6 +166,8 @@ export class CkbClient implements CkbReadClient {
   readonly #senderOwner: Owner<ClientPublicTestnet>;
   readonly #safeReadAttempts: number;
   readonly #retryDelayMs: number;
+  readonly #rpcHttpEndpoints: readonly string[];
+  readonly #timeoutMs: number;
   readonly #metrics: Pick<AutomataMetrics, "rpcErrorsTotal"> | undefined;
   readonly #telemetry: Pick<TelemetryRuntime, "withSpan"> | undefined;
   #closed = false;
@@ -140,6 +178,8 @@ export class CkbClient implements CkbReadClient {
     senderOwner: Owner<ClientPublicTestnet>,
     safeReadAttempts: number,
     retryDelayMs: number,
+    rpcHttpEndpoints: readonly string[],
+    timeoutMs: number,
     instrumentation: Pick<CkbClientOptions, "metrics" | "telemetry">,
   ) {
     this.#chainOwner = chainOwner;
@@ -147,6 +187,8 @@ export class CkbClient implements CkbReadClient {
     this.#senderOwner = senderOwner;
     this.#safeReadAttempts = safeReadAttempts;
     this.#retryDelayMs = retryDelayMs;
+    this.#rpcHttpEndpoints = rpcHttpEndpoints;
+    this.#timeoutMs = timeoutMs;
     this.#metrics = instrumentation.metrics;
     this.#telemetry = instrumentation.telemetry;
   }
@@ -168,10 +210,19 @@ export class CkbClient implements CkbReadClient {
     const indexerOwner = ClientPublicTestnet.open({ urls: indexerEndpoints, timeout });
     // Writes deliberately receive no fallback endpoints.
     const senderOwner = ClientPublicTestnet.open({ urls: [rpcEndpoints[0]], timeout });
-    return new CkbClient(chainOwner, indexerOwner, senderOwner, safeReadAttempts, retryDelayMs, {
-      ...(options.metrics === undefined ? {} : { metrics: options.metrics }),
-      ...(options.telemetry === undefined ? {} : { telemetry: options.telemetry }),
-    });
+    return new CkbClient(
+      chainOwner,
+      indexerOwner,
+      senderOwner,
+      safeReadAttempts,
+      retryDelayMs,
+      rpcEndpoints.filter((endpoint) => endpoint.startsWith("http")),
+      timeout,
+      {
+        ...(options.metrics === undefined ? {} : { metrics: options.metrics }),
+        ...(options.telemetry === undefined ? {} : { telemetry: options.telemetry }),
+      },
+    );
   }
 
   #assertOpen(): void {
@@ -237,6 +288,43 @@ export class CkbClient implements CkbReadClient {
     return this.#safeRead("CHAIN_READ_FAILED", "rpc", "get_block_by_number", () =>
       this.#chainOwner.value.getBlockByNumberNoCache(blockNumber),
     );
+  }
+
+  getBlocksByNumber(
+    blockNumbers: readonly NumLike[],
+  ): Promise<readonly (ClientBlock | undefined)[]> {
+    if (blockNumbers.length === 0) return Promise.resolve(Object.freeze([]));
+    if (blockNumbers.length > MAXIMUM_BLOCK_BATCH_SIZE) {
+      throw new RangeError(`block batch size must not exceed ${MAXIMUM_BLOCK_BATCH_SIZE}`);
+    }
+    if (this.#rpcHttpEndpoints.length === 0) {
+      return Promise.all(blockNumbers.map((blockNumber) => this.getBlockByNumber(blockNumber)));
+    }
+    return this.#safeRead("CHAIN_READ_FAILED", "rpc", "get_block_by_number_batch", async () => {
+      let cause: unknown;
+      for (const endpoint of this.#rpcHttpEndpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            body: JSON.stringify(
+              blockNumbers.map((blockNumber, id) => ({
+                id,
+                jsonrpc: "2.0",
+                method: "get_block_by_number",
+                params: [numToHex(blockNumber)],
+              })),
+            ),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+            signal: AbortSignal.timeout(this.#timeoutMs),
+          });
+          if (!response.ok) throw new TypeError("block batch request failed");
+          return batchResponse(await response.json(), blockNumbers.length);
+        } catch (error) {
+          cause = error;
+        }
+      }
+      throw cause instanceof Error ? cause : new Error("block batch request failed");
+    });
   }
 
   getBlockByHash(blockHash: HexLike): Promise<ClientBlock | undefined> {

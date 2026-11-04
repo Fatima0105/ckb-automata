@@ -16,7 +16,7 @@ function block(number: bigint) {
 }
 
 test("an empty index backfills a bounded window in stable batches", () => {
-  assert.deepEqual(nextIndexerScanRange(undefined, 1_000n), { first: 745n, last: 776n });
+  assert.deepEqual(nextIndexerScanRange(undefined, 1_000n), { first: 745n, last: 872n });
   assert.deepEqual(nextIndexerScanRange(999n, 1_000n), { first: 1_000n, last: 1_000n });
   assert.equal(nextIndexerScanRange(1_000n, 1_000n), undefined);
   assert.deepEqual(nextIndexerScanRange(undefined, 10n), { first: 0n, last: 10n });
@@ -59,6 +59,36 @@ test("runtime scans sequential canonical blocks and reports whether it caught up
   assert.equal(maximumActiveReads, 5);
   assert.ok(maximumActiveReads <= INDEXER_FETCH_CONCURRENCY);
   assert.equal(logs[0]?.["lastBlock"], "100");
+});
+
+test("runtime uses a batch read while preserving sequential projection", async () => {
+  const loaded: bigint[][] = [];
+  const projected: bigint[] = [];
+  const runtime = new LiveIndexerRuntime(
+    {
+      getBlockByNumber: async () => assert.fail("batch-capable clients must not use single reads"),
+      getBlocksByNumber: async (numbers: readonly bigint[]) => {
+        loaded.push([...numbers]);
+        return numbers.map(block);
+      },
+      getTipHeader: async () => ({ number: 100n }),
+    } as never,
+    { load: async () => ({ blockNumber: 95n }) } as never,
+    {
+      projectBlock: async (value: { header: { number: bigint } }) => {
+        projected.push(value.header.number);
+      },
+    } as never,
+    { error: () => undefined, info: () => undefined },
+    {
+      enabled: true,
+      loadDeployment: async () => ({ network: "ckb_testnet" }) as RegisteredDeployment,
+    },
+  );
+
+  assert.deepEqual(await runtime.runBatch(), { caughtUp: true, scanned: 5 });
+  assert.deepEqual(loaded, [[96n, 97n, 98n, 99n, 100n]]);
+  assert.deepEqual(projected, [96n, 97n, 98n, 99n, 100n]);
 });
 
 test("runtime rejects a non-contiguous prefetched range before projection", async () => {

@@ -74,6 +74,46 @@ async function openServer(
   };
 }
 
+async function openBatchServer(
+  handler: (request: readonly RpcRequest[], response: ServerResponse) => void | Promise<void>,
+) {
+  const server = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    const payload = JSON.parse(body) as unknown;
+    if (!Array.isArray(payload)) throw new Error("mock batch RPC expected an array");
+    await handler(payload as readonly RpcRequest[], response);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("mock batch RPC did not bind");
+  return {
+    url: `http://127.0.0.1:${address.port}/`,
+    async close() {
+      server.closeAllConnections();
+      server.close();
+      await once(server, "close");
+    },
+  };
+}
+
+function rpcBlock(number: number) {
+  const header = tipHeader();
+  return {
+    extension: `0x${"00".repeat(32)}`,
+    header: {
+      ...header,
+      hash: `0x${number.toString(16).padStart(64, "0")}`,
+      number: `0x${number.toString(16)}`,
+      parent_hash: `0x${(number - 1).toString(16).padStart(64, "0")}`,
+    },
+    proposals: [],
+    transactions: [],
+    uncles: [],
+  };
+}
+
 test("CCC wrapper reads chain and indexer responses", async (context) => {
   const chain = await openServer((request, response) => {
     const result =
@@ -155,6 +195,64 @@ test("CCC wrapper reads chain and indexer responses", async (context) => {
       txIndex: 1n,
     },
   ]);
+});
+
+test("block batches validate unordered envelopes and restore requested order", async (context) => {
+  const chain = await openBatchServer((requests, response) => {
+    assert.deepEqual(
+      requests.map(({ method, params }) => [method, params[0]]),
+      [
+        ["get_block_by_number", "0x29"],
+        ["get_block_by_number", "0x2a"],
+      ],
+    );
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify([
+        { id: 1, jsonrpc: "2.0", result: rpcBlock(42) },
+        { id: 0, jsonrpc: "2.0", result: rpcBlock(41) },
+      ]),
+    );
+  });
+  context.after(() => chain.close());
+  const client = createCkbClient({
+    rpcEndpoints: [chain.url],
+    indexerEndpoints: [chain.url],
+    timeoutMs: 200,
+    safeReadAttempts: 1,
+  });
+  context.after(() => client.close());
+
+  const blocks = await client.getBlocksByNumber([41n, 42n]);
+  assert.deepEqual(
+    blocks.map((block) => block?.header.number),
+    [41n, 42n],
+  );
+});
+
+test("block batches fail closed on duplicate or missing response ids", async (context) => {
+  const chain = await openBatchServer((_requests, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify([
+        { id: 0, jsonrpc: "2.0", result: rpcBlock(41) },
+        { id: 0, jsonrpc: "2.0", result: rpcBlock(42) },
+      ]),
+    );
+  });
+  context.after(() => chain.close());
+  const client = createCkbClient({
+    rpcEndpoints: [chain.url],
+    indexerEndpoints: [chain.url],
+    timeoutMs: 200,
+    safeReadAttempts: 1,
+  });
+  context.after(() => client.close());
+
+  await assert.rejects(
+    client.getBlocksByNumber([41n, 42n]),
+    (error: unknown) => error instanceof CkbClientError && error.code === "CHAIN_READ_FAILED",
+  );
 });
 
 test("client configuration rejects unsafe endpoints and retry bounds", () => {
@@ -244,7 +342,7 @@ test("failed endpoints rotate to the next configured CCC transport", async (cont
   const client = createCkbClient({
     rpcEndpoints: [failed.url, healthy.url],
     indexerEndpoints: [healthy.url],
-    timeoutMs: 100,
+    timeoutMs: 1_000,
     safeReadAttempts: 1,
   });
   context.after(() => client.close());

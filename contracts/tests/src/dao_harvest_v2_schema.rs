@@ -29,8 +29,8 @@ struct Payload {
     version: u16,
     owner_lock_hash: String,
     payout_lock_hash: String,
-    vault_lock_hash: String,
-    compensation_lock_hash: String,
+    vault_lock_code_hash: String,
+    compensation_lock_code_hash: String,
     dao_type_hash: String,
     principal_capacity: String,
     preferred_prepare_operator_lock_hash: String,
@@ -148,8 +148,8 @@ fn rust_v2_types_and_hash_domains_match_the_canonical_fixture() {
         .version(value.payload.version.to_le_bytes())
         .owner_lock_hash(byte32(&value.payload.owner_lock_hash))
         .payout_lock_hash(byte32(&value.payload.payout_lock_hash))
-        .vault_lock_hash(byte32(&value.payload.vault_lock_hash))
-        .compensation_lock_hash(byte32(&value.payload.compensation_lock_hash))
+        .vault_lock_code_hash(byte32(&value.payload.vault_lock_code_hash))
+        .compensation_lock_code_hash(byte32(&value.payload.compensation_lock_code_hash))
         .dao_type_hash(byte32(&value.payload.dao_type_hash))
         .principal_capacity(u64_bytes(&value.payload.principal_capacity))
         .preferred_prepare_operator_lock_hash(byte32(

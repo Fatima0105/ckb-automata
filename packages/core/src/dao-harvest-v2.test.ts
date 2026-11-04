@@ -60,8 +60,8 @@ function payloadValue(value: Section) {
     version: value["version"] as number,
     owner_lock_hash: [...decode(value["owner_lock_hash"])],
     payout_lock_hash: [...decode(value["payout_lock_hash"])],
-    vault_lock_hash: [...decode(value["vault_lock_hash"])],
-    compensation_lock_hash: [...decode(value["compensation_lock_hash"])],
+    vault_lock_code_hash: [...decode(value["vault_lock_code_hash"])],
+    compensation_lock_code_hash: [...decode(value["compensation_lock_code_hash"])],
     dao_type_hash: [...decode(value["dao_type_hash"])],
     principal_capacity: value["principal_capacity"] as string,
     preferred_prepare_operator_lock_hash: [

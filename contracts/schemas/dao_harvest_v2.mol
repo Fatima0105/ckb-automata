@@ -8,6 +8,9 @@
 // that may replace only preferred_prepare_operator_lock_hash,
 // fallback_prepare_executor_set_hash, and payload_hash in the successor Job.
 // No field authorizes a reduction of principal or compensation reserve.
+// vault_lock_code_hash and compensation_lock_code_hash commit the deployed
+// Data1 code identities. Their full script hashes are derived only after the
+// payload hash is known and their exact args are independently validated.
 //
 // CompensationLockArgsV2 is raw concatenation in this exact order:
 // job_id || owner_lock_hash || payout_lock_hash || policy_script_hash ||
@@ -41,8 +44,8 @@ table DaoHarvestPayloadV2 {
   version: Uint16,
   owner_lock_hash: Byte32,
   payout_lock_hash: Byte32,
-  vault_lock_hash: Byte32,
-  compensation_lock_hash: Byte32,
+  vault_lock_code_hash: Byte32,
+  compensation_lock_code_hash: Byte32,
   dao_type_hash: Byte32,
   principal_capacity: Uint64,
   preferred_prepare_operator_lock_hash: Byte32,

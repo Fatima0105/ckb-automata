@@ -303,6 +303,28 @@ importers:
         specifier: 7.8.2
         version: 7.8.2
 
+  apps/operator:
+    dependencies:
+      '@ckb-automata/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@ckb-automata/molecule':
+        specifier: workspace:*
+        version: link:../../packages/molecule
+      '@ckb-automata/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
+      '@nervosnetwork/ckb-sdk-utils':
+        specifier: 0.109.5
+        version: 0.109.5
+    devDependencies:
+      '@types/node':
+        specifier: 24.11.1
+        version: 24.11.1
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   apps/web:
     dependencies:
       '@ckb-automata/api-client':

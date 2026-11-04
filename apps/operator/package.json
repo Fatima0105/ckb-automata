@@ -1,0 +1,33 @@
+{
+  "name": "@ckb-automata/operator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone public-RPC operator for CKAutomata DAO Harvest V2",
+  "type": "module",
+  "bin": {
+    "ckb-automata-operator": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "pnpm build",
+    "start": "node dist/cli.js",
+    "test": "node --test src/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=24.11.1"
+  },
+  "dependencies": {
+    "@ckb-automata/core": "workspace:*",
+    "@ckb-automata/molecule": "workspace:*",
+    "@ckb-automata/telemetry": "workspace:*",
+    "@nervosnetwork/ckb-sdk-utils": "0.109.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.11.1",
+    "typescript": "7.0.2"
+  }
+}

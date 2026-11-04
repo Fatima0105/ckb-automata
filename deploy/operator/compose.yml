@@ -1,0 +1,16 @@
+name: ckautomata-external-operator
+
+services:
+  operator:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/operator.Dockerfile
+    image: ckautomata/operator:0.1.0
+    command: ["serve"]
+    env_file:
+      - operator.env
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - 127.0.0.1:${OPERATOR_HEALTH_PORT:-9464}:${OPERATOR_HEALTH_PORT:-9464}

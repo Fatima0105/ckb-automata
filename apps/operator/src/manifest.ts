@@ -1,0 +1,166 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+
+import { PERSONAL, blake2b, hexToBytes } from "@nervosnetwork/ckb-sdk-utils";
+
+import type { JsonRpcClient } from "./rpc.ts";
+import { record, string } from "./rpc.ts";
+
+const HASH = /^0x[0-9a-f]{64}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+
+export interface OperatorManifestContract {
+  readonly codeHash: string;
+  readonly hashType: "data1";
+  readonly binarySha256: string;
+  readonly sizeBytes: number;
+  readonly cellDep: {
+    readonly outPoint: { readonly txHash: string; readonly index: string };
+    readonly depType: "code";
+  };
+}
+
+export interface OperatorManifest {
+  readonly schemaVersion: 2;
+  readonly releaseVersion: string;
+  readonly network: "ckb_testnet";
+  readonly genesisHash: string;
+  readonly sourceRevision: string;
+  readonly contracts: {
+    readonly jobLock: OperatorManifestContract;
+    readonly policy: OperatorManifestContract;
+    readonly vaultLock: OperatorManifestContract;
+    readonly compensationLock: OperatorManifestContract;
+  };
+}
+
+export interface LoadedOperatorManifest {
+  readonly manifest: OperatorManifest;
+  readonly sha256: string;
+}
+
+function hash(value: unknown, name: string): string {
+  const parsed = string(value, name);
+  if (!HASH.test(parsed)) throw new TypeError(`${name} must be a lowercase 32-byte hash`);
+  return parsed;
+}
+
+function contract(value: unknown, name: string): OperatorManifestContract {
+  const parsed = record(value, name);
+  const cellDep = record(parsed["cellDep"], `${name}.cellDep`);
+  const outPoint = record(cellDep["outPoint"], `${name}.cellDep.outPoint`);
+  const sizeBytes = parsed["sizeBytes"];
+  const binarySha256 = string(parsed["binarySha256"], `${name}.binarySha256`);
+  if (!SHA256.test(binarySha256)) throw new TypeError(`${name}.binarySha256 is invalid`);
+  if (!Number.isSafeInteger(sizeBytes) || Number(sizeBytes) < 1) {
+    throw new TypeError(`${name}.sizeBytes is invalid`);
+  }
+  if (parsed["hashType"] !== "data1" || cellDep["depType"] !== "code") {
+    throw new TypeError(`${name} must use a data1 code cell`);
+  }
+  return Object.freeze({
+    codeHash: hash(parsed["codeHash"], `${name}.codeHash`),
+    hashType: "data1" as const,
+    binarySha256,
+    sizeBytes: Number(sizeBytes),
+    cellDep: Object.freeze({
+      depType: "code" as const,
+      outPoint: Object.freeze({
+        txHash: hash(outPoint["txHash"], `${name}.cellDep.outPoint.txHash`),
+        index: string(outPoint["index"], `${name}.cellDep.outPoint.index`),
+      }),
+    }),
+  });
+}
+
+function parseManifest(value: unknown): OperatorManifest {
+  const parsed = record(value, "operator manifest");
+  const contracts = record(parsed["contracts"], "operator manifest contracts");
+  if (parsed["schemaVersion"] !== 2 || parsed["network"] !== "ckb_testnet") {
+    throw new TypeError("operator manifest must target CKAutomata V2 on CKB testnet");
+  }
+  const releaseVersion = string(parsed["releaseVersion"], "releaseVersion");
+  const sourceRevision = string(parsed["sourceRevision"], "sourceRevision");
+  if (!/^v?[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(releaseVersion)) {
+    throw new TypeError("releaseVersion must be semantic");
+  }
+  if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
+    throw new TypeError("sourceRevision must be a full Git commit");
+  }
+  return Object.freeze({
+    schemaVersion: 2 as const,
+    releaseVersion,
+    network: "ckb_testnet" as const,
+    genesisHash: hash(parsed["genesisHash"], "genesisHash"),
+    sourceRevision,
+    contracts: Object.freeze({
+      jobLock: contract(contracts["jobLock"], "contracts.jobLock"),
+      policy: contract(contracts["policy"], "contracts.policy"),
+      vaultLock: contract(contracts["vaultLock"], "contracts.vaultLock"),
+      compensationLock: contract(contracts["compensationLock"], "contracts.compensationLock"),
+    }),
+  });
+}
+
+export async function loadOperatorManifest(path: string): Promise<LoadedOperatorManifest> {
+  const bytes = await readFile(path);
+  const manifest = parseManifest(JSON.parse(bytes.toString("utf8")) as unknown);
+  return Object.freeze({
+    manifest,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  });
+}
+
+function ckbHash(bytes: Uint8Array): string {
+  const hasher = blake2b(32, null, null, PERSONAL);
+  hasher.update(bytes);
+  return `0x${hasher.digest("hex")}`;
+}
+
+export async function verifyOperatorManifest(
+  loaded: LoadedOperatorManifest,
+  rpc: JsonRpcClient,
+  expectedGenesisHash?: string,
+) {
+  const genesisHash = await rpc.call<string>("get_block_hash", ["0x0"]);
+  const expected = expectedGenesisHash ?? loaded.manifest.genesisHash;
+  if (genesisHash !== expected || genesisHash !== loaded.manifest.genesisHash) {
+    throw new Error("public RPC genesis does not match the operator manifest");
+  }
+  const verified: { name: string; outPoint: string; binarySha256: string }[] = [];
+  for (const [name, item] of Object.entries(loaded.manifest.contracts)) {
+    const result = record(
+      await rpc.call("get_live_cell", [
+        {
+          tx_hash: item.cellDep.outPoint.txHash,
+          index: item.cellDep.outPoint.index,
+        },
+        true,
+      ]),
+      `${name} live cell`,
+    );
+    if (result["status"] !== "live") throw new Error(`${name} code cell is not live`);
+    const cell = record(result["cell"], `${name} cell`);
+    const data = record(cell["data"], `${name} cell data`);
+    const bytes = hexToBytes(string(data["content"], `${name} cell data content`));
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (bytes.length !== item.sizeBytes || digest !== item.binarySha256) {
+      throw new Error(`${name} code cell does not match the audited binary`);
+    }
+    if (ckbHash(bytes) !== item.codeHash) {
+      throw new Error(`${name} CKB code hash does not match the manifest`);
+    }
+    verified.push({
+      name,
+      outPoint: `${item.cellDep.outPoint.txHash}:${item.cellDep.outPoint.index}`,
+      binarySha256: digest,
+    });
+  }
+  return Object.freeze({
+    status: "verified" as const,
+    releaseVersion: loaded.manifest.releaseVersion,
+    manifestSha256: loaded.sha256,
+    genesisHash,
+    contracts: Object.freeze(verified),
+  });
+}

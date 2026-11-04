@@ -168,6 +168,7 @@ test("V2 witness envelope frames all external bytes without inferred lengths", a
     payload: byteArray(String(value.envelope["payload"])),
     progress: byteArray(String(value.envelope["progress"])),
     prepare_credit: byteArray(String(value.envelope["prepare_credit"])),
+    operator_proof: byteArray(String(value.envelope["operator_proof"])),
   });
   assert.equal(bytes.hexify(encoded), value.envelope["expected_hex"]);
   const decoded = DaoHarvestEnvelopeV2.unpack(encoded);
@@ -176,5 +177,9 @@ test("V2 witness envelope frames all external bytes without inferred lengths", a
   assert.equal(
     bytes.hexify(Uint8Array.from(decoded.prepare_credit)),
     value.envelope["prepare_credit"],
+  );
+  assert.equal(
+    bytes.hexify(Uint8Array.from(decoded.operator_proof)),
+    value.envelope["operator_proof"],
   );
 });

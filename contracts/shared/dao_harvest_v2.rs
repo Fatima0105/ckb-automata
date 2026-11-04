@@ -85,6 +85,27 @@ pub fn fallback_operator_set_hash(
     domain_hash(FALLBACK_SET_DOMAIN, &parts)
 }
 
+pub fn decode_fallback_operator_proof(
+    bytes: &[u8],
+    expected_hash: &[u8; 32],
+) -> Option<Vec<[u8; 32]>> {
+    if bytes.is_empty()
+        || !bytes.len().is_multiple_of(32)
+        || bytes.len() > MAX_FALLBACK_PREPARE_OPERATORS * 32
+    {
+        return None;
+    }
+    let operators = bytes
+        .chunks_exact(32)
+        .map(|chunk| chunk.try_into().ok())
+        .collect::<Option<Vec<[u8; 32]>>>()?;
+    if operators.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return None;
+    }
+    let mut hashed = operators.clone();
+    (fallback_operator_set_hash(&mut hashed)? == *expected_hash).then_some(operators)
+}
+
 pub fn encode_compensation_lock_args(input: &CompensationLockArgsV2) -> [u8; 160] {
     let mut encoded = [0_u8; COMPENSATION_LOCK_ARGS_LENGTH];
     for (index, value) in [

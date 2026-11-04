@@ -4,9 +4,9 @@ use serde::Deserialize;
 use crate::{
     dao_harvest_v2::{
         COMPENSATION_LOCK_ARGS_LENGTH, CompensationLockArgsV2, DAO_HARVEST_V2_VERSION,
-        PREFERRED_CLAIM_OPERATION, decode_compensation_lock_args, encode_compensation_lock_args,
-        fallback_operator_set_hash, operation_is_supported, payload_hash, prepare_credit_hash,
-        progress_hash,
+        PREFERRED_CLAIM_OPERATION, decode_compensation_lock_args, decode_fallback_operator_proof,
+        encode_compensation_lock_args, fallback_operator_set_hash, operation_is_supported,
+        payload_hash, prepare_credit_hash, progress_hash,
     },
     generated_dao_harvest_v2::{
         Bytes, DaoHarvestEnvelopeV2, DaoHarvestPayloadV2, DaoHarvestPrepareCreditV2,
@@ -108,6 +108,7 @@ struct Envelope {
     payload: String,
     progress: String,
     prepare_credit: String,
+    operator_proof: String,
     expected_hex: String,
 }
 
@@ -184,6 +185,14 @@ fn rust_v2_types_and_hash_domains_match_the_canonical_fixture() {
         fallback_operator_set_hash(&mut fallback),
         Some(byte32(&value.payload.fallback_prepare_executor_set_hash))
     );
+    let proof = decode_hex(&value.envelope.operator_proof);
+    assert_eq!(
+        decode_fallback_operator_proof(
+            &proof,
+            &byte32(&value.payload.fallback_prepare_executor_set_hash)
+        ),
+        Some(fallback)
+    );
 
     let credit = DaoHarvestPrepareCreditV2::new_builder()
         .version(value.prepare_credit.version.to_le_bytes())
@@ -252,6 +261,7 @@ fn rust_v2_types_and_hash_domains_match_the_canonical_fixture() {
         .payload(molecule_bytes(&value.envelope.payload))
         .progress(molecule_bytes(&value.envelope.progress))
         .prepare_credit(molecule_bytes(&value.envelope.prepare_credit))
+        .operator_proof(molecule_bytes(&value.envelope.operator_proof))
         .build();
     assert_eq!(
         envelope.as_slice(),
@@ -291,4 +301,8 @@ fn operation_codes_are_closed_and_fallback_sets_reject_ambiguity() {
     assert_eq!(fallback_operator_set_hash(&mut []), None);
     assert_eq!(fallback_operator_set_hash(&mut [[1; 32], [1; 32]]), None);
     assert_eq!(fallback_operator_set_hash(&mut [[1; 32]; 9]), None);
+    assert_eq!(
+        decode_fallback_operator_proof(&[[2; 32], [1; 32]].concat(), &[0; 32]),
+        None
+    );
 }

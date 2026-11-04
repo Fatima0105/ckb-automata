@@ -11,6 +11,7 @@ import {
 import {
   DAO_HARVEST_V2_OPERATIONS,
   deriveDaoHarvestV2FallbackOperatorSetHash,
+  encodeDaoHarvestV2FallbackOperatorProof,
   deriveDaoHarvestV2PayloadHash,
   deriveDaoHarvestV2PrepareCreditHash,
   deriveDaoHarvestV2ProgressHash,
@@ -33,6 +34,7 @@ const compensation = fill(0x44);
 const preferred = fill(0x55);
 const fallbackOperators = [fill(0x77), fill(0x66)];
 const fallbackSetHash = deriveDaoHarvestV2FallbackOperatorSetHash(fallbackOperators);
+const fallbackOperatorProof = encodeDaoHarvestV2FallbackOperatorProof(fallbackOperators);
 const daoType = fill(0xab);
 const policy = fill(0xaa);
 const jobId = fill(0x88);
@@ -103,6 +105,7 @@ const envelopeValue = {
   payload: [...payloadBytes],
   progress: [...progressBytes],
   prepare_credit: [...creditBytes],
+  operator_proof: [...fallbackOperatorProof],
 };
 const envelopeBytes = DaoHarvestEnvelopeV2.pack(envelopeValue);
 const compensationArgs = encodeDaoHarvestV2CompensationLockArgs({
@@ -152,6 +155,7 @@ const fixture = {
     payload: hex(payloadBytes),
     progress: hex(progressBytes),
     prepare_credit: hex(creditBytes),
+    operator_proof: hex(fallbackOperatorProof),
     expected_hex: hex(envelopeBytes),
   },
   compensation_lock_args: {

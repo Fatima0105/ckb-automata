@@ -110,6 +110,41 @@ export function deriveDaoHarvestV2FallbackOperatorSetHash(
   return hashDomain(DAO_HARVEST_V2_DOMAINS.fallbackSet, [count, ...normalized]);
 }
 
+export function encodeDaoHarvestV2FallbackOperatorProof(
+  operatorLockHashes: readonly Uint8Array[],
+): Uint8Array {
+  const normalized = normalizeDaoHarvestV2FallbackOperators(operatorLockHashes);
+  const proof = new Uint8Array(normalized.length * BYTE32_LENGTH);
+  normalized.forEach((operator, index) => proof.set(operator, index * BYTE32_LENGTH));
+  return proof;
+}
+
+export function decodeDaoHarvestV2FallbackOperatorProof(
+  proof: Uint8Array,
+  expectedSetHash: Uint8Array,
+): readonly Uint8Array[] {
+  if (
+    proof.length === 0 ||
+    proof.length % BYTE32_LENGTH !== 0 ||
+    proof.length > MAX_DAO_HARVEST_V2_FALLBACK_OPERATORS * BYTE32_LENGTH
+  ) {
+    throw new RangeError("fallback operator proof must contain 1 to 8 full lock hashes");
+  }
+  const operators = Array.from({ length: proof.length / BYTE32_LENGTH }, (_, index) =>
+    proof.slice(index * BYTE32_LENGTH, (index + 1) * BYTE32_LENGTH),
+  );
+  for (let index = 1; index < operators.length; index += 1) {
+    if (compareBytes(operators[index - 1]!, operators[index]!) >= 0) {
+      throw new RangeError("fallback operator proof must be strictly sorted and unique");
+    }
+  }
+  const actual = deriveDaoHarvestV2FallbackOperatorSetHash(operators);
+  if (compareBytes(actual, byte32(expectedSetHash, "expectedSetHash")) !== 0) {
+    throw new RangeError("fallback operator proof does not match the committed set");
+  }
+  return Object.freeze(operators);
+}
+
 export interface DaoHarvestV2CompensationLockArgs {
   readonly jobId: Uint8Array;
   readonly ownerLockHash: Uint8Array;

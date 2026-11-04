@@ -15,6 +15,8 @@ import {
   assertDaoHarvestV2WitnessLayout,
   decodeDaoHarvestV2CompensationLockArgs,
   deriveDaoHarvestV2FallbackOperatorSetHash,
+  decodeDaoHarvestV2FallbackOperatorProof,
+  encodeDaoHarvestV2FallbackOperatorProof,
   deriveDaoHarvestV2PayloadHash,
   deriveDaoHarvestV2PrepareCreditHash,
   deriveDaoHarvestV2ProgressHash,
@@ -30,6 +32,7 @@ interface Fixture {
   prepare_credit: Section;
   progress: Section;
   witness: Section;
+  envelope: Section;
   compensation_lock_args: Section;
 }
 
@@ -151,6 +154,36 @@ test("fallback identities are sorted, copied, bounded, and unique", () => {
   );
   assert.throws(() => normalizeDaoHarvestV2FallbackOperators([first, first]), /duplicate/);
   assert.throws(() => normalizeDaoHarvestV2FallbackOperators([new Uint8Array(31)]), /32 bytes/);
+});
+
+test("fallback proof is canonical and matches the committed set", async () => {
+  const value = await fixture();
+  const operators = (value.payload["fallback_prepare_executor_lock_hashes"] as string[]).map(
+    decode,
+  );
+  const expectedHash = decode(value.payload["fallback_prepare_executor_set_hash"]);
+  const proof = encodeDaoHarvestV2FallbackOperatorProof(operators);
+  assert.equal(encode(proof), value.envelope["operator_proof"]);
+  assert.deepEqual(
+    decodeDaoHarvestV2FallbackOperatorProof(proof, expectedHash),
+    normalizeDaoHarvestV2FallbackOperators(operators),
+  );
+
+  const reversed = Uint8Array.from(proof);
+  reversed.set(proof.slice(32, 64), 0);
+  reversed.set(proof.slice(0, 32), 32);
+  assert.throws(
+    () => decodeDaoHarvestV2FallbackOperatorProof(reversed, expectedHash),
+    /strictly sorted/,
+  );
+  assert.throws(
+    () =>
+      decodeDaoHarvestV2FallbackOperatorProof(
+        proof,
+        Uint8Array.from(expectedHash, (byte, index) => (index === 0 ? byte ^ 1 : byte)),
+      ),
+    /does not match/,
+  );
 });
 
 const absentIndices = (): DaoHarvestV2WitnessIndices => ({

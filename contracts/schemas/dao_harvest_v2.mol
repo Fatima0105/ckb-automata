@@ -25,6 +25,8 @@
 // absent sentinel and is allowed only for fields unused by the selected
 // operation. payload_hash, progress_hash, and prepare_credit_hash bind the
 // external envelopes carried in the Job witness output_type.
+// operator_proof is a concatenation of sorted 32-byte full lock hashes. It is
+// present only for setup, fallback prepare, and rotation, and empty otherwise.
 
 array Uint16 [byte; 2];
 array Uint32 [byte; 4];
@@ -93,4 +95,5 @@ table DaoHarvestEnvelopeV2 {
   payload: Bytes,
   progress: Bytes,
   prepare_credit: Bytes,
+  operator_proof: Bytes,
 }

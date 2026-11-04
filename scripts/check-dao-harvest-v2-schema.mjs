@@ -78,6 +78,7 @@ assert.deepEqual(tableFields("DaoHarvestEnvelopeV2"), [
   "progress:Bytes",
   "prepare_credit:Bytes",
   "operator_proof:Bytes",
+  "successor_payload:Bytes",
 ]);
 
 for (const rule of [
@@ -94,4 +95,4 @@ for (const forbiddenField of ["min_compensation", "executor_reward", "remaining_
   assert.ok(!schema.includes(`${forbiddenField}:`), `forbidden V2 field: ${forbiddenField}`);
 }
 
-console.log("DAO Harvest V2 schema review passed: 48 ordered fields and one 160-byte lock layout");
+console.log("DAO Harvest V2 schema review passed: 49 ordered fields and one 160-byte lock layout");

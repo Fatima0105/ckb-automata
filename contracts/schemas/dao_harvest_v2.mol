@@ -27,6 +27,8 @@
 // external envelopes carried in the Job witness output_type.
 // operator_proof is a concatenation of sorted 32-byte full lock hashes. It is
 // present only for setup, fallback prepare, and rotation, and empty otherwise.
+// successor_payload is present only for owner-authorized rotation. The payload
+// field always carries the current committed payload (or the setup payload).
 
 array Uint16 [byte; 2];
 array Uint32 [byte; 4];
@@ -96,4 +98,5 @@ table DaoHarvestEnvelopeV2 {
   progress: Bytes,
   prepare_credit: Bytes,
   operator_proof: Bytes,
+  successor_payload: Bytes,
 }

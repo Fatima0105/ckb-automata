@@ -109,6 +109,7 @@ struct Envelope {
     progress: String,
     prepare_credit: String,
     operator_proof: String,
+    successor_payload: String,
     expected_hex: String,
 }
 
@@ -262,6 +263,7 @@ fn rust_v2_types_and_hash_domains_match_the_canonical_fixture() {
         .progress(molecule_bytes(&value.envelope.progress))
         .prepare_credit(molecule_bytes(&value.envelope.prepare_credit))
         .operator_proof(molecule_bytes(&value.envelope.operator_proof))
+        .successor_payload(molecule_bytes(&value.envelope.successor_payload))
         .build();
     assert_eq!(
         envelope.as_slice(),

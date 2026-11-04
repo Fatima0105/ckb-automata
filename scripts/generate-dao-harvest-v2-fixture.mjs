@@ -106,6 +106,7 @@ const envelopeValue = {
   progress: [...progressBytes],
   prepare_credit: [...creditBytes],
   operator_proof: [...fallbackOperatorProof],
+  successor_payload: [],
 };
 const envelopeBytes = DaoHarvestEnvelopeV2.pack(envelopeValue);
 const compensationArgs = encodeDaoHarvestV2CompensationLockArgs({
@@ -156,6 +157,7 @@ const fixture = {
     progress: hex(progressBytes),
     prepare_credit: hex(creditBytes),
     operator_proof: hex(fallbackOperatorProof),
+    successor_payload: "0x",
     expected_hex: hex(envelopeBytes),
   },
   compensation_lock_args: {

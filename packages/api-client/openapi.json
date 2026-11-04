@@ -964,28 +964,146 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "cells": {
+                            "properties": {
+                              "compensation": {
+                                "additionalProperties": true,
+                                "nullable": true,
+                                "type": "object"
+                              },
+                              "daoVault": {
+                                "additionalProperties": true,
+                                "nullable": true,
+                                "type": "object"
+                              },
+                              "job": {
+                                "additionalProperties": true,
+                                "nullable": true,
+                                "type": "object"
+                              }
+                            },
+                            "required": ["job", "daoVault", "compensation"],
+                            "type": "object"
+                          },
+                          "compensation": {
+                            "properties": {
+                              "availableToWithdraw": {
+                                "nullable": true,
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              },
+                              "cellAmount": {
+                                "nullable": true,
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["cellAmount", "availableToWithdraw"],
+                            "type": "object"
+                          },
                           "evidence": {
                             "properties": {
+                              "blockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                              "blockNumber": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
                               "canonical": { "type": "boolean" },
                               "completeness": { "enum": ["complete", "partial"], "type": "string" },
+                              "transactionHash": {
+                                "pattern": "^0x[0-9a-f]{64}$",
+                                "type": "string"
+                              },
                               "transactionStatus": { "type": "string" }
                             },
-                            "required": ["completeness", "transactionStatus", "canonical"],
+                            "required": [
+                              "completeness",
+                              "transactionStatus",
+                              "canonical",
+                              "blockNumber",
+                              "blockHash",
+                              "transactionHash"
+                            ],
                             "type": "object"
                           },
                           "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "operatorWindow": {
+                            "additionalProperties": true,
+                            "nullable": true,
+                            "type": "object"
+                          },
+                          "ownerLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "payloadHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "payoutLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "prepareCredit": {
+                            "additionalProperties": true,
+                            "nullable": true,
+                            "type": "object"
+                          },
+                          "progress": {
+                            "properties": {
+                              "cycle": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                              "totalCycles": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                            },
+                            "required": ["cycle", "totalCycles"],
+                            "type": "object"
+                          },
                           "protectedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                          "serviceSettlement": {
+                            "properties": {
+                              "claimPaid": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                              "lastOperation": { "type": "string" },
+                              "preparePaid": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                              "status": { "enum": ["complete", "partial"], "type": "string" }
+                            },
+                            "required": ["status", "preparePaid", "claimPaid", "lastOperation"],
+                            "type": "object"
+                          },
                           "state": { "type": "string" },
+                          "updatedAt": { "format": "date-time", "type": "string" },
                           "version": { "enum": [2], "type": "integer" }
                         },
-                        "required": ["version", "jobId", "state", "protectedAmount", "evidence"],
+                        "required": [
+                          "version",
+                          "jobId",
+                          "ownerLockHash",
+                          "payoutLockHash",
+                          "payloadHash",
+                          "state",
+                          "progress",
+                          "protectedAmount",
+                          "compensation",
+                          "cells",
+                          "prepareCredit",
+                          "operatorWindow",
+                          "serviceSettlement",
+                          "evidence",
+                          "updatedAt"
+                        ],
                         "type": "object"
                       },
                       "type": "array"
                     },
-                    "page": { "type": "object" },
-                    "pendingItems": { "items": { "type": "object" }, "type": "array" }
+                    "page": {
+                      "properties": {
+                        "limit": { "maximum": 100, "minimum": 1, "type": "integer" },
+                        "nextCursor": { "nullable": true, "type": "string" }
+                      },
+                      "required": ["limit", "nextCursor"],
+                      "type": "object"
+                    },
+                    "pendingItems": {
+                      "items": {
+                        "properties": {
+                          "lastKnownStatus": { "type": "string" },
+                          "status": { "enum": ["submitting", "confirming"], "type": "string" },
+                          "submittedAt": { "format": "date-time", "type": "string" },
+                          "transactionHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" }
+                        },
+                        "required": ["transactionHash", "submittedAt", "status", "lastKnownStatus"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
                   },
+                  "required": ["items", "pendingItems", "page"],
                   "type": "object"
                 }
               }
@@ -1007,7 +1125,24 @@
         },
         "responses": {
           "200": {
-            "content": { "application/json": { "schema": { "type": "object" } } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "operation": {
+                      "enum": ["setup", "sweep", "close", "rotate", "recover"],
+                      "type": "string"
+                    },
+                    "review": { "additionalProperties": true, "type": "object" },
+                    "transaction": { "additionalProperties": true, "type": "object" },
+                    "version": { "enum": [2], "type": "integer" }
+                  },
+                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "type": "object"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -1025,7 +1160,24 @@
         },
         "responses": {
           "200": {
-            "content": { "application/json": { "schema": { "type": "object" } } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "operation": {
+                      "enum": ["setup", "sweep", "close", "rotate", "recover"],
+                      "type": "string"
+                    },
+                    "review": { "additionalProperties": true, "type": "object" },
+                    "transaction": { "additionalProperties": true, "type": "object" },
+                    "version": { "enum": [2], "type": "integer" }
+                  },
+                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "type": "object"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -1043,7 +1195,24 @@
         },
         "responses": {
           "200": {
-            "content": { "application/json": { "schema": { "type": "object" } } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "operation": {
+                      "enum": ["setup", "sweep", "close", "rotate", "recover"],
+                      "type": "string"
+                    },
+                    "review": { "additionalProperties": true, "type": "object" },
+                    "transaction": { "additionalProperties": true, "type": "object" },
+                    "version": { "enum": [2], "type": "integer" }
+                  },
+                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "type": "object"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -1061,7 +1230,24 @@
         },
         "responses": {
           "200": {
-            "content": { "application/json": { "schema": { "type": "object" } } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "operation": {
+                      "enum": ["setup", "sweep", "close", "rotate", "recover"],
+                      "type": "string"
+                    },
+                    "review": { "additionalProperties": true, "type": "object" },
+                    "transaction": { "additionalProperties": true, "type": "object" },
+                    "version": { "enum": [2], "type": "integer" }
+                  },
+                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "type": "object"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -1079,7 +1265,24 @@
         },
         "responses": {
           "200": {
-            "content": { "application/json": { "schema": { "type": "object" } } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "operation": {
+                      "enum": ["setup", "sweep", "close", "rotate", "recover"],
+                      "type": "string"
+                    },
+                    "review": { "additionalProperties": true, "type": "object" },
+                    "transaction": { "additionalProperties": true, "type": "object" },
+                    "version": { "enum": [2], "type": "integer" }
+                  },
+                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "type": "object"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -1104,21 +1307,112 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "cells": {
+                      "properties": {
+                        "compensation": {
+                          "additionalProperties": true,
+                          "nullable": true,
+                          "type": "object"
+                        },
+                        "daoVault": {
+                          "additionalProperties": true,
+                          "nullable": true,
+                          "type": "object"
+                        },
+                        "job": { "additionalProperties": true, "nullable": true, "type": "object" }
+                      },
+                      "required": ["job", "daoVault", "compensation"],
+                      "type": "object"
+                    },
+                    "compensation": {
+                      "properties": {
+                        "availableToWithdraw": {
+                          "nullable": true,
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "cellAmount": {
+                          "nullable": true,
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["cellAmount", "availableToWithdraw"],
+                      "type": "object"
+                    },
                     "evidence": {
                       "properties": {
+                        "blockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                        "blockNumber": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
                         "canonical": { "type": "boolean" },
                         "completeness": { "enum": ["complete", "partial"], "type": "string" },
+                        "transactionHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                         "transactionStatus": { "type": "string" }
                       },
-                      "required": ["completeness", "transactionStatus", "canonical"],
+                      "required": [
+                        "completeness",
+                        "transactionStatus",
+                        "canonical",
+                        "blockNumber",
+                        "blockHash",
+                        "transactionHash"
+                      ],
                       "type": "object"
                     },
                     "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "operatorWindow": {
+                      "additionalProperties": true,
+                      "nullable": true,
+                      "type": "object"
+                    },
+                    "ownerLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "payloadHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "payoutLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "prepareCredit": {
+                      "additionalProperties": true,
+                      "nullable": true,
+                      "type": "object"
+                    },
+                    "progress": {
+                      "properties": {
+                        "cycle": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "totalCycles": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                      },
+                      "required": ["cycle", "totalCycles"],
+                      "type": "object"
+                    },
                     "protectedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                    "serviceSettlement": {
+                      "properties": {
+                        "claimPaid": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "lastOperation": { "type": "string" },
+                        "preparePaid": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "status": { "enum": ["complete", "partial"], "type": "string" }
+                      },
+                      "required": ["status", "preparePaid", "claimPaid", "lastOperation"],
+                      "type": "object"
+                    },
                     "state": { "type": "string" },
+                    "updatedAt": { "format": "date-time", "type": "string" },
                     "version": { "enum": [2], "type": "integer" }
                   },
-                  "required": ["version", "jobId", "state", "protectedAmount", "evidence"],
+                  "required": [
+                    "version",
+                    "jobId",
+                    "ownerLockHash",
+                    "payoutLockHash",
+                    "payloadHash",
+                    "state",
+                    "progress",
+                    "protectedAmount",
+                    "compensation",
+                    "cells",
+                    "prepareCredit",
+                    "operatorWindow",
+                    "serviceSettlement",
+                    "evidence",
+                    "updatedAt"
+                  ],
                   "type": "object"
                 }
               }
@@ -1137,7 +1431,73 @@
         "parameters": [],
         "responses": {
           "200": {
-            "content": { "application/json": { "schema": { "type": "object" } } },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "compensation": {
+                      "properties": {
+                        "availableToWithdraw": {
+                          "nullable": true,
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "cellAmount": {
+                          "nullable": true,
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["cellAmount", "availableToWithdraw"],
+                      "type": "object"
+                    },
+                    "evidence": {
+                      "properties": {
+                        "blockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                        "blockNumber": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "canonical": { "type": "boolean" },
+                        "completeness": { "enum": ["complete", "partial"], "type": "string" },
+                        "transactionHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                        "transactionStatus": { "type": "string" }
+                      },
+                      "required": [
+                        "completeness",
+                        "transactionStatus",
+                        "canonical",
+                        "blockNumber",
+                        "blockHash",
+                        "transactionHash"
+                      ],
+                      "type": "object"
+                    },
+                    "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "protectedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                    "quoteId": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+                    "serviceSettlement": {
+                      "properties": {
+                        "claimPaid": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "lastOperation": { "type": "string" },
+                        "preparePaid": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "status": { "enum": ["complete", "partial"], "type": "string" }
+                      },
+                      "required": ["status", "preparePaid", "claimPaid", "lastOperation"],
+                      "type": "object"
+                    },
+                    "state": { "type": "string" }
+                  },
+                  "required": [
+                    "quoteId",
+                    "jobId",
+                    "state",
+                    "protectedAmount",
+                    "compensation",
+                    "serviceSettlement",
+                    "evidence"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
             "description": ""
           }
         },

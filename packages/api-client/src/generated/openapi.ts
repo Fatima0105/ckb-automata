@@ -1358,21 +1358,71 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": {
-                        readonly items?: readonly {
+                        readonly items: readonly {
+                            readonly cells: {
+                                readonly compensation: {
+                                    readonly [key: string]: unknown;
+                                } | null;
+                                readonly daoVault: {
+                                    readonly [key: string]: unknown;
+                                } | null;
+                                readonly job: {
+                                    readonly [key: string]: unknown;
+                                } | null;
+                            };
+                            readonly compensation: {
+                                readonly availableToWithdraw: string | null;
+                                readonly cellAmount: string | null;
+                            };
                             readonly evidence: {
+                                readonly blockHash: string;
+                                readonly blockNumber: string;
                                 readonly canonical: boolean;
                                 /** @enum {string} */
                                 readonly completeness: "complete" | "partial";
+                                readonly transactionHash: string;
                                 readonly transactionStatus: string;
                             };
                             readonly jobId: string;
+                            readonly operatorWindow: {
+                                readonly [key: string]: unknown;
+                            } | null;
+                            readonly ownerLockHash: string;
+                            readonly payloadHash: string;
+                            readonly payoutLockHash: string;
+                            readonly prepareCredit: {
+                                readonly [key: string]: unknown;
+                            } | null;
+                            readonly progress: {
+                                readonly cycle: string;
+                                readonly totalCycles: string;
+                            };
                             readonly protectedAmount: string;
+                            readonly serviceSettlement: {
+                                readonly claimPaid: string;
+                                readonly lastOperation: string;
+                                readonly preparePaid: string;
+                                /** @enum {string} */
+                                readonly status: "complete" | "partial";
+                            };
                             readonly state: string;
+                            /** Format: date-time */
+                            readonly updatedAt: string;
                             /** @enum {integer} */
                             readonly version: 2;
                         }[];
-                        readonly page?: Record<string, unknown>;
-                        readonly pendingItems?: readonly Record<string, unknown>[];
+                        readonly page: {
+                            readonly limit: number;
+                            readonly nextCursor: string | null;
+                        };
+                        readonly pendingItems: readonly {
+                            readonly lastKnownStatus: string;
+                            /** @enum {string} */
+                            readonly status: "submitting" | "confirming";
+                            /** Format: date-time */
+                            readonly submittedAt: string;
+                            readonly transactionHash: string;
+                        }[];
                     };
                 };
             };
@@ -1395,15 +1445,55 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": {
+                        readonly cells: {
+                            readonly compensation: {
+                                readonly [key: string]: unknown;
+                            } | null;
+                            readonly daoVault: {
+                                readonly [key: string]: unknown;
+                            } | null;
+                            readonly job: {
+                                readonly [key: string]: unknown;
+                            } | null;
+                        };
+                        readonly compensation: {
+                            readonly availableToWithdraw: string | null;
+                            readonly cellAmount: string | null;
+                        };
                         readonly evidence: {
+                            readonly blockHash: string;
+                            readonly blockNumber: string;
                             readonly canonical: boolean;
                             /** @enum {string} */
                             readonly completeness: "complete" | "partial";
+                            readonly transactionHash: string;
                             readonly transactionStatus: string;
                         };
                         readonly jobId: string;
+                        readonly operatorWindow: {
+                            readonly [key: string]: unknown;
+                        } | null;
+                        readonly ownerLockHash: string;
+                        readonly payloadHash: string;
+                        readonly payoutLockHash: string;
+                        readonly prepareCredit: {
+                            readonly [key: string]: unknown;
+                        } | null;
+                        readonly progress: {
+                            readonly cycle: string;
+                            readonly totalCycles: string;
+                        };
                         readonly protectedAmount: string;
+                        readonly serviceSettlement: {
+                            readonly claimPaid: string;
+                            readonly lastOperation: string;
+                            readonly preparePaid: string;
+                            /** @enum {string} */
+                            readonly status: "complete" | "partial";
+                        };
                         readonly state: string;
+                        /** Format: date-time */
+                        readonly updatedAt: string;
                         /** @enum {integer} */
                         readonly version: 2;
                     };
@@ -1432,7 +1522,32 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": Record<string, unknown>;
+                    readonly "application/json": {
+                        readonly compensation: {
+                            readonly availableToWithdraw: string | null;
+                            readonly cellAmount: string | null;
+                        };
+                        readonly evidence: {
+                            readonly blockHash: string;
+                            readonly blockNumber: string;
+                            readonly canonical: boolean;
+                            /** @enum {string} */
+                            readonly completeness: "complete" | "partial";
+                            readonly transactionHash: string;
+                            readonly transactionStatus: string;
+                        };
+                        readonly jobId: string;
+                        readonly protectedAmount: string;
+                        readonly quoteId: string;
+                        readonly serviceSettlement: {
+                            readonly claimPaid: string;
+                            readonly lastOperation: string;
+                            readonly preparePaid: string;
+                            /** @enum {string} */
+                            readonly status: "complete" | "partial";
+                        };
+                        readonly state: string;
+                    };
                 };
             };
         };
@@ -1455,7 +1570,19 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": Record<string, unknown>;
+                    readonly "application/json": {
+                        readonly intentHash: string;
+                        /** @enum {string} */
+                        readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly review: {
+                            readonly [key: string]: unknown;
+                        };
+                        readonly transaction: {
+                            readonly [key: string]: unknown;
+                        };
+                        /** @enum {integer} */
+                        readonly version: 2;
+                    };
                 };
             };
         };
@@ -1478,7 +1605,19 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": Record<string, unknown>;
+                    readonly "application/json": {
+                        readonly intentHash: string;
+                        /** @enum {string} */
+                        readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly review: {
+                            readonly [key: string]: unknown;
+                        };
+                        readonly transaction: {
+                            readonly [key: string]: unknown;
+                        };
+                        /** @enum {integer} */
+                        readonly version: 2;
+                    };
                 };
             };
         };
@@ -1501,7 +1640,19 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": Record<string, unknown>;
+                    readonly "application/json": {
+                        readonly intentHash: string;
+                        /** @enum {string} */
+                        readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly review: {
+                            readonly [key: string]: unknown;
+                        };
+                        readonly transaction: {
+                            readonly [key: string]: unknown;
+                        };
+                        /** @enum {integer} */
+                        readonly version: 2;
+                    };
                 };
             };
         };
@@ -1524,7 +1675,19 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": Record<string, unknown>;
+                    readonly "application/json": {
+                        readonly intentHash: string;
+                        /** @enum {string} */
+                        readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly review: {
+                            readonly [key: string]: unknown;
+                        };
+                        readonly transaction: {
+                            readonly [key: string]: unknown;
+                        };
+                        /** @enum {integer} */
+                        readonly version: 2;
+                    };
                 };
             };
         };
@@ -1547,7 +1710,19 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": Record<string, unknown>;
+                    readonly "application/json": {
+                        readonly intentHash: string;
+                        /** @enum {string} */
+                        readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly review: {
+                            readonly [key: string]: unknown;
+                        };
+                        readonly transaction: {
+                            readonly [key: string]: unknown;
+                        };
+                        /** @enum {integer} */
+                        readonly version: 2;
+                    };
                 };
             };
         };

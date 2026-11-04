@@ -88,6 +88,11 @@ test("DAO harvest API publishes read, quote, and unsigned mutation routes", asyn
     assert.match(JSON.stringify(schema), /prepareStartSince/);
     const listSchema = document.paths["/v1/dao-harvest"]?.get?.responses?.["200"];
     assert.match(JSON.stringify(listSchema), /pendingItems/);
+    const v2DetailSchema = document.paths["/v1/dao-harvest-v2/{jobId}"]?.get?.responses?.["200"];
+    assert.match(JSON.stringify(v2DetailSchema), /availableToWithdraw/);
+    assert.match(JSON.stringify(v2DetailSchema), /operatorWindow/);
+    assert.match(JSON.stringify(v2DetailSchema), /serviceSettlement/);
+    assert.match(JSON.stringify(v2DetailSchema), /blockNumber/);
     const fastify = app.getHttpAdapter().getInstance() as {
       inject(input: {
         method: string;

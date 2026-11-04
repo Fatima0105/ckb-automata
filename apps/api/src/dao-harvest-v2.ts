@@ -19,6 +19,7 @@ import {
   ApiParam,
   ApiQuery,
   ApiTags,
+  type SchemaObject,
 } from "@nestjs/swagger";
 import { createHash } from "node:crypto";
 import { and, desc, eq, lt, or } from "drizzle-orm";
@@ -371,23 +372,156 @@ export class DaoHarvestV2Controller {
   }
 }
 
-const harvestV2Schema = {
+const hashSchema: SchemaObject = { type: "string", pattern: "^0x[0-9a-f]{64}$" };
+const decimalSchema: SchemaObject = { type: "string", pattern: "^(0|[1-9][0-9]*)$" };
+const nullableDecimalSchema: SchemaObject = { ...decimalSchema, nullable: true };
+const outPointSchema: SchemaObject = {
   type: "object",
-  required: ["version", "jobId", "state", "protectedAmount", "evidence"],
+  nullable: true,
+  additionalProperties: true,
+};
+const compensationSchema: SchemaObject = {
+  type: "object",
+  required: ["cellAmount", "availableToWithdraw"],
+  properties: {
+    cellAmount: nullableDecimalSchema,
+    availableToWithdraw: nullableDecimalSchema,
+  },
+};
+const evidenceSchema: SchemaObject = {
+  type: "object",
+  required: [
+    "completeness",
+    "transactionStatus",
+    "canonical",
+    "blockNumber",
+    "blockHash",
+    "transactionHash",
+  ],
+  properties: {
+    completeness: { type: "string", enum: ["complete", "partial"] },
+    transactionStatus: { type: "string" },
+    canonical: { type: "boolean" },
+    blockNumber: decimalSchema,
+    blockHash: hashSchema,
+    transactionHash: hashSchema,
+  },
+};
+const serviceSettlementSchema: SchemaObject = {
+  type: "object",
+  required: ["status", "preparePaid", "claimPaid", "lastOperation"],
+  properties: {
+    status: { type: "string", enum: ["complete", "partial"] },
+    preparePaid: decimalSchema,
+    claimPaid: decimalSchema,
+    lastOperation: { type: "string" },
+  },
+};
+const operatorWindowSchema: SchemaObject = {
+  type: "object",
+  nullable: true,
+  additionalProperties: true,
+};
+const prepareCreditSchema: SchemaObject = {
+  type: "object",
+  nullable: true,
+  additionalProperties: true,
+};
+const harvestV2Schema: SchemaObject = {
+  type: "object",
+  required: [
+    "version",
+    "jobId",
+    "ownerLockHash",
+    "payoutLockHash",
+    "payloadHash",
+    "state",
+    "progress",
+    "protectedAmount",
+    "compensation",
+    "cells",
+    "prepareCredit",
+    "operatorWindow",
+    "serviceSettlement",
+    "evidence",
+    "updatedAt",
+  ],
   properties: {
     version: { type: "integer", enum: [2] },
-    jobId: { type: "string", pattern: "^0x[0-9a-f]{64}$" },
+    jobId: hashSchema,
+    ownerLockHash: hashSchema,
+    payoutLockHash: hashSchema,
+    payloadHash: hashSchema,
     state: { type: "string" },
-    protectedAmount: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
-    evidence: {
+    progress: {
       type: "object",
-      required: ["completeness", "transactionStatus", "canonical"],
+      required: ["cycle", "totalCycles"],
       properties: {
-        completeness: { type: "string", enum: ["complete", "partial"] },
-        transactionStatus: { type: "string" },
-        canonical: { type: "boolean" },
+        cycle: decimalSchema,
+        totalCycles: decimalSchema,
       },
     },
+    protectedAmount: decimalSchema,
+    compensation: compensationSchema,
+    cells: {
+      type: "object",
+      required: ["job", "daoVault", "compensation"],
+      properties: {
+        job: outPointSchema,
+        daoVault: outPointSchema,
+        compensation: outPointSchema,
+      },
+    },
+    prepareCredit: prepareCreditSchema,
+    operatorWindow: operatorWindowSchema,
+    serviceSettlement: serviceSettlementSchema,
+    evidence: evidenceSchema,
+    updatedAt: { type: "string", format: "date-time" },
+  },
+};
+
+const pendingV2Schema: SchemaObject = {
+  type: "object",
+  required: ["transactionHash", "submittedAt", "status", "lastKnownStatus"],
+  properties: {
+    transactionHash: hashSchema,
+    submittedAt: { type: "string", format: "date-time" },
+    status: { type: "string", enum: ["submitting", "confirming"] },
+    lastKnownStatus: { type: "string" },
+  },
+};
+
+const quoteV2Schema: SchemaObject = {
+  type: "object",
+  required: [
+    "quoteId",
+    "jobId",
+    "state",
+    "protectedAmount",
+    "compensation",
+    "serviceSettlement",
+    "evidence",
+  ],
+  properties: {
+    quoteId: { type: "string", pattern: "^[0-9a-f]{64}$" },
+    jobId: hashSchema,
+    state: { type: "string" },
+    protectedAmount: decimalSchema,
+    compensation: compensationSchema,
+    serviceSettlement: serviceSettlementSchema,
+    evidence: evidenceSchema,
+  },
+};
+
+const unsignedBuildV2Schema: SchemaObject = {
+  type: "object",
+  required: ["version", "operation", "transaction", "intentHash", "review"],
+  properties: {
+    version: { type: "integer", enum: [2] },
+    operation: { type: "string", enum: ["setup", "sweep", "close", "rotate", "recover"] },
+    transaction: { type: "object", additionalProperties: true },
+    intentHash: hashSchema,
+    review: { type: "object", additionalProperties: true },
   },
 };
 
@@ -420,10 +554,18 @@ ApiQuery({ name: "limit", required: false, type: Number })(
 ApiOkResponse({
   schema: {
     type: "object",
+    required: ["items", "pendingItems", "page"],
     properties: {
       items: { type: "array", items: harvestV2Schema },
-      pendingItems: { type: "array", items: { type: "object" } },
-      page: { type: "object" },
+      pendingItems: { type: "array", items: pendingV2Schema },
+      page: {
+        type: "object",
+        required: ["limit", "nextCursor"],
+        properties: {
+          limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+          nextCursor: { type: "string", nullable: true },
+        },
+      },
     },
   },
 })(DaoHarvestV2Controller.prototype, "list", listDescriptor);
@@ -463,7 +605,7 @@ ApiOperation({ summary: "Quote one canonical DAO harvest V2 snapshot" })(
   "quote",
   quoteDescriptor,
 );
-ApiOkResponse({ schema: { type: "object" } })(
+ApiOkResponse({ schema: quoteV2Schema })(
   DaoHarvestV2Controller.prototype,
   "quote",
   quoteDescriptor,
@@ -479,7 +621,7 @@ for (const operation of ["setup", "sweep", "close", "rotate", "recover"] as cons
     descriptor,
   );
   ApiBody({ schema: { type: "object" } })(DaoHarvestV2Controller.prototype, operation, descriptor);
-  ApiOkResponse({ schema: { type: "object" } })(
+  ApiOkResponse({ schema: unsignedBuildV2Schema })(
     DaoHarvestV2Controller.prototype,
     operation,
     descriptor,

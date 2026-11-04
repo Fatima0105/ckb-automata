@@ -32,7 +32,7 @@ services:
       - key: CKB_INDEXER_URL
         value: https://testnet.ckbapp.dev/
       - key: DAO_HARVEST_V2_MANIFEST_PATH
-        value: deploy/manifests/dao-harvest-v2-testnet.json
+        value: ../../deploy/manifests/dao-harvest-v2-testnet.json
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL

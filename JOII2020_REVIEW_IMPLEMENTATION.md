@@ -318,7 +318,7 @@ Each stage is implemented, tested, audited, and corrected before dependent work 
 | --------------------------------------- | -------- | -------------------------------------------------------------------- |
 | 1. Requirements and economic rules      | Complete | ADRs 0009-0011, V2 requirements, vocabulary and documentation tests  |
 | 2. Transaction boundaries               | Complete | Signed-byte, dry-run cycle, fee, shape and one-job guards documented |
-| 3. Compensation and reward prototypes   | Pending  | Not started                                                          |
+| 3. Compensation and reward prototypes   | Complete | Bound owner Cell and same-lock operator accumulator selected         |
 | 4. V2 schemas and fixtures              | Pending  | Not started                                                          |
 | 5. V2 contracts                         | Pending  | Not started                                                          |
 | 6. SDK builders and wallet review       | Pending  | Not started                                                          |
@@ -520,16 +520,16 @@ The final report must publish:
 
 ## 13. Decision Checkpoints
 
-| Decision                        | Status                 | Resolution or closing stage                                                                    |
-| ------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------- |
-| Prepare-credit representation   | Pending                | Compare trigger/progress commitment with a typed receipt in Stage 3; freeze bytes in Stage 4   |
-| Compensation Cell requirement   | Accepted               | Mandatory per-job Cell with owner-recoverable seed under ADR 0010                              |
-| Fee shortfall                   | Accepted               | Principal first, then partial prepare fee, partial claim fee, then owner compensation; no debt |
-| Operator payment representation | Accepted for prototype | Same-lock ordinary identity accumulator; prove capacity behavior in Stage 3                    |
-| Preferred claimant              | Accepted               | The confirmed preparer receives the first claim window                                         |
-| Prepare fallback set            | Accepted               | One through eight sorted unique operators opening simultaneously at takeover                   |
-| Safe takeover interval          | Accepted               | Minimum `1/20` canonical epoch plus pending-transaction and canonical-input reload guards      |
-| Owner claim timing              | Accepted               | Owner completion and recovery are available at maturity without waiting for fallback           |
+| Decision                        | Status              | Resolution or closing stage                                                                    |
+| ------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
+| Prepare-credit representation   | Accepted for schema | Authenticated Job successor commitment; no separate typed receipt Cell                         |
+| Compensation Cell requirement   | Accepted            | Mandatory per-job Cell with owner-recoverable seed under ADR 0010                              |
+| Fee shortfall                   | Accepted            | Principal first, then partial prepare fee, partial claim fee, then owner compensation; no debt |
+| Operator payment representation | Accepted            | Same-lock ordinary identity accumulator; exact delta proven without dust output                |
+| Preferred claimant              | Accepted            | The confirmed preparer receives the first claim window                                         |
+| Prepare fallback set            | Accepted            | One through eight sorted unique operators opening simultaneously at takeover                   |
+| Safe takeover interval          | Accepted            | Minimum `1/20` canonical epoch plus pending-transaction and canonical-input reload guards      |
+| Owner claim timing              | Accepted            | Owner completion and recovery are available at maturity without waiting for fallback           |
 
 Every pending decision requires written reasoning, adversarial cases, occupied-capacity impact, and
 a test fixture before contract implementation proceeds.

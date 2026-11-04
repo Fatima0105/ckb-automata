@@ -142,6 +142,9 @@ mod dao_harvest_payload;
 mod dao_harvest_contract;
 
 #[cfg(test)]
+mod dao_harvest_v2_cells;
+
+#[cfg(test)]
 mod conformance;
 
 #[cfg(test)]

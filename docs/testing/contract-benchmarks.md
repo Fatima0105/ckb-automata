@@ -35,6 +35,10 @@ transaction quotes do not depend on hand-maintained capacity constants.
 The report is local deterministic CKB-VM evidence. It is not a public testnet
 fee measurement and does not include an executor fee-rate estimate.
 
+The capacity report also includes Stage 3 prototype measurements for a zero-argument payout Cell and
+the five-hash, 160-byte-args DAO Harvest V2 Compensation Cell. Prototype entries are occupied-capacity
+evidence only; they do not claim that a V2 contract binary is already implemented.
+
 DAO Harvest V2's complete-transaction budgets and pre-signing guard are documented in
 [`dao-harvest-v2-transaction-boundaries.md`](./dao-harvest-v2-transaction-boundaries.md). The V1
 policy measurements in this report are the comparable baseline, not evidence that unimplemented V2

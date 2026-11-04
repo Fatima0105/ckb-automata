@@ -256,6 +256,22 @@ export {
 } from "./harvest-v2-transaction-limits.ts";
 
 export {
+  HARVEST_V2_COMPENSATION_CELL_OCCUPIED_CAPACITY,
+  HARVEST_V2_COMPENSATION_LOCK_ARGS_BYTES,
+  prototypeCompensationClose,
+  prototypeCompensationSeed,
+  prototypeCompensationSweep,
+  prototypeHarvestV2Settlement,
+  prototypeOperatorAccumulator,
+  prototypePlainCellOccupiedCapacity,
+  type CompensationClosePrototype,
+  type CompensationSweepPrototype,
+  type HarvestV2SettlementPrototype,
+  type HarvestV2SettlementPrototypeInput,
+  type OperatorAccumulatorPrototype,
+} from "./dao-harvest-v2-prototype.ts";
+
+export {
   DEADLINE_CREATION_INTENT_DOMAIN,
   assertDeadlineCompletion,
   buildDeadlineCreation,

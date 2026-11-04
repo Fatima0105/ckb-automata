@@ -130,6 +130,16 @@
       "occupiedShannons": "6100000000"
     },
     {
+      "id": "short-payout-cell-v2-prototype",
+      "dataBytes": 0,
+      "occupiedShannons": "4100000000"
+    },
+    {
+      "id": "compensation-cell-v2-prototype",
+      "dataBytes": 0,
+      "occupiedShannons": "20100000000"
+    },
+    {
       "id": "job-cell-v1",
       "dataBytes": 275,
       "occupiedShannons": "38100000000"

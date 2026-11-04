@@ -65,6 +65,8 @@ make execution unattractive, but it cannot make an otherwise valid mature owner 
 ## Compensation Cell rules
 
 - Setup creates exactly one job-bound Compensation Cell.
+- Its V2 lock commits the Job ID, owner lock hash, payout lock hash, policy script hash, and payload
+  hash. The prototype encodes these as five 32-byte lock arguments.
 - Every automated claim consumes exactly one and recreates exactly one.
 - Its successor capacity increases by exactly net compensation.
 - Its lock, Job ID, payout commitment, policy commitment, and seed never change automatically.
@@ -79,6 +81,10 @@ make execution unattractive, but it cannot make an otherwise valid mature owner 
 An operator payment uses a declared identity input and a same-lock accumulator output. The output
 capacity increase is exactly the amount assigned by the canonical value order. A new below-capacity
 reward output is forbidden.
+
+If the preparer and claimant use the same full lock, one accumulator receives their combined exact
+payment. Otherwise each operator supplies one distinct identity input and receives one same-lock
+successor. No operator accumulator is funded by the owner or shared with another lock.
 
 Prepare credit is tied to the confirmed prepare transition and the exact Job ID/cycle. It cannot be
 copied to another job, cycle, operator, or payout. The final persistence representation is selected
@@ -168,3 +174,4 @@ claim that a broadcast transaction can be cancelled.
 - [ADR 0009: Settle Harvest Service Fees from Compensation](../architecture/0009-settle-harvest-service-fees-from-compensation.md)
 - [ADR 0010: Accumulate Harvest Compensation in an Owner Vault](../architecture/0010-accumulate-harvest-compensation-in-an-owner-vault.md)
 - [ADR 0011: Use Preferred Harvest Operators with Delayed Fallback](../architecture/0011-use-preferred-harvest-operators-with-delayed-fallback.md)
+- [ADR 0012: Use Bound Compensation and Same-Lock Operator Accumulators](../architecture/0012-use-bound-compensation-and-same-lock-operator-accumulators.md)

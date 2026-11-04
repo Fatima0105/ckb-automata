@@ -177,6 +177,8 @@ fn occupied(output: CellOutput, data: &Bytes) -> u64 {
 
 fn capacity_measurements() -> (Vec<CapacityMeasurement>, Vec<PayloadMeasurement>) {
     let wallet_lock = seeded_script(0x11, ScriptHashType::Type, &[0x22; 20]);
+    let short_payout_lock = seeded_script(0x13, ScriptHashType::Type, &[]);
+    let compensation_lock = seeded_script(0x14, ScriptHashType::Data1, &[0x77; 160]);
     let permissionless_lock = seeded_script(0x12, ScriptHashType::Data1, &[]);
     let job_lock = seeded_script(0x33, ScriptHashType::Data1, &[]);
     let policy = seeded_script(0x44, ScriptHashType::Data1, &[0x55; 32]);
@@ -223,6 +225,8 @@ fn capacity_measurements() -> (Vec<CapacityMeasurement>, Vec<PayloadMeasurement>
         .as_bytes();
 
     let plain_output = CellOutput::new_builder().lock(wallet_lock.clone()).build();
+    let short_payout_output = CellOutput::new_builder().lock(short_payout_lock).build();
+    let compensation_output = CellOutput::new_builder().lock(compensation_lock).build();
     let job_output = CellOutput::new_builder()
         .lock(job_lock)
         .type_(Some(policy.clone()).pack())
@@ -238,6 +242,16 @@ fn capacity_measurements() -> (Vec<CapacityMeasurement>, Vec<PayloadMeasurement>
                 id: "plain-wallet-cell".to_owned(),
                 data_bytes: 0,
                 occupied_shannons: occupied(plain_output, &Bytes::new()),
+            },
+            CapacityMeasurement {
+                id: "short-payout-cell-v2-prototype".to_owned(),
+                data_bytes: 0,
+                occupied_shannons: occupied(short_payout_output, &Bytes::new()),
+            },
+            CapacityMeasurement {
+                id: "compensation-cell-v2-prototype".to_owned(),
+                data_bytes: 0,
+                occupied_shannons: occupied(compensation_output, &Bytes::new()),
             },
             CapacityMeasurement {
                 id: "job-cell-v1".to_owned(),

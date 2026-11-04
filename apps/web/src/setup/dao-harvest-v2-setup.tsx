@@ -56,6 +56,12 @@ function api() {
   return createApiClient({ baseUrl: browserWebEnvironment().apiUrl });
 }
 
+function nonce(): string {
+  const words = new Uint32Array(2);
+  globalThis.crypto.getRandomValues(words);
+  return ((BigInt(words[0] ?? 0) << 32n) | BigInt(words[1] ?? 0)).toString();
+}
+
 function reviewKey(draft: SetupDraft, ownerLockHash: string | undefined): string {
   return JSON.stringify({ draft, ownerLockHash });
 }
@@ -92,13 +98,20 @@ function reviewFailure(reason: unknown): string {
   return reason instanceof Error ? reason.message : "These harvest settings could not be prepared.";
 }
 
-async function setupBody(draft: SetupDraft, session: ReturnType<typeof useWalletSession>) {
+async function setupBody(
+  draft: SetupDraft,
+  session: ReturnType<typeof useWalletSession>,
+  creatorNonce: string,
+) {
   if (!session.ownerLockHash) throw new Error("Connect the owner wallet first.");
-  const [ownerLock, payoutLock] = await Promise.all([
+  const [identityOutPoint, ownerLock, payoutLock] = await Promise.all([
+    session.selectDeadlinePledge(),
     session.getOwnerLock(session.ownerLockHash),
     session.resolveLock(draft["payoutAddress"] ?? ""),
   ]);
   return Object.freeze({
+    creatorNonce,
+    identityOutPoint,
     ownerLock,
     ownerLockHash: session.ownerLockHash,
     payoutLock,
@@ -268,6 +281,7 @@ function HarvestV2Review({
 }>) {
   const session = useWalletSession();
   const key = reviewKey(context.draft, session.ownerLockHash);
+  const creatorNonce = useMemo(nonce, [key]);
   useEffect(() => {
     if (session.status !== "ready" || !session.ownerLockHash) {
       onState({ status: "error", message: "Connect a supported CKB testnet wallet first." });
@@ -275,7 +289,7 @@ function HarvestV2Review({
     }
     let active = true;
     onState({ status: "loading" });
-    void setupBody(context.draft, session)
+    void setupBody(context.draft, session, creatorNonce)
       .then(async (body) => {
         const [build, network] = await Promise.all([
           api().buildDaoHarvestV2("setup", body),
@@ -308,7 +322,7 @@ function HarvestV2Review({
     return () => {
       active = false;
     };
-  }, [context.draft, key, onState, session]);
+  }, [context.draft, creatorNonce, key, onState, session]);
 
   if (state.status === "loading" || state.status === "idle")
     return (

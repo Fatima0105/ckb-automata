@@ -22,10 +22,11 @@ import {
   type SchemaObject,
 } from "@nestjs/swagger";
 import { createHash } from "node:crypto";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 
 import type { AutomataDatabase } from "./database/client.ts";
-import { daoHarvestV2Jobs } from "./database/schema.ts";
+import type { CkbReadClient } from "./ckb-client.ts";
+import { daoHarvestV2Jobs, transactionAttempts } from "./database/schema.ts";
 
 const HASH = /^0x[0-9a-f]{64}$/;
 const DEFAULT_LIMIT = 20;
@@ -137,6 +138,68 @@ export interface StoredDaoHarvestV2Submission {
 export interface DaoHarvestV2PendingSource {
   list(): Promise<readonly StoredDaoHarvestV2Submission[]>;
   status(transactionHash: string): Promise<string | undefined>;
+}
+
+const V2_PENDING_STATES = ["submitted", "proposed", "committed", "confirmed"] as const;
+
+export class PostgresDaoHarvestV2PendingSource implements DaoHarvestV2PendingSource {
+  readonly #chain: Pick<CkbReadClient, "getTransactionStatus">;
+  readonly #database: AutomataDatabase;
+  readonly #network: string;
+
+  constructor(
+    database: AutomataDatabase,
+    network: string,
+    chain: Pick<CkbReadClient, "getTransactionStatus">,
+  ) {
+    this.#database = database;
+    this.#network = network;
+    this.#chain = chain;
+  }
+
+  async list(): Promise<readonly StoredDaoHarvestV2Submission[]> {
+    const rows = await this.#database
+      .select({
+        simulation: transactionAttempts.simulation,
+        state: transactionAttempts.state,
+        submittedAt: transactionAttempts.submittedAt,
+        transactionHash: transactionAttempts.txHash,
+      })
+      .from(transactionAttempts)
+      .where(
+        and(
+          eq(transactionAttempts.networkId, this.#network),
+          eq(transactionAttempts.operation, "create"),
+          inArray(transactionAttempts.state, [...V2_PENDING_STATES]),
+        ),
+      )
+      .orderBy(desc(transactionAttempts.submittedAt));
+    return Object.freeze(
+      rows.flatMap((row) => {
+        const metadata = row.simulation as Record<string, unknown> | null;
+        return metadata?.["kind"] === "pending_dao_harvest_v2" &&
+          row.transactionHash !== null &&
+          row.submittedAt !== null
+          ? [
+              Object.freeze({
+                transactionHash: row.transactionHash,
+                submittedAt: row.submittedAt,
+                lastKnownStatus: row.state,
+              }),
+            ]
+          : [];
+      }),
+    );
+  }
+
+  async status(transactionHash: string): Promise<string | undefined> {
+    const response = await this.#chain.getTransactionStatus(transactionHash);
+    if (!response) return undefined;
+    if (response.status === "committed") return "confirmed";
+    if (response.status === "rejected") return "dropped";
+    if (response.status === "pending" || response.status === "sent") return "submitted";
+    return response.status;
+  }
 }
 
 export class DaoHarvestV2PendingService implements DaoHarvestV2PendingProvider {

@@ -6,7 +6,7 @@ import {
   DaoHarvestPrepareCreditV2,
   DaoHarvestProgressV2,
 } from "@ckb-automata/molecule";
-import { scriptToHash } from "@nervosnetwork/ckb-sdk-utils";
+import { scriptToHash, serializeWitnessArgs } from "@nervosnetwork/ckb-sdk-utils";
 
 import type { Hash32 } from "./chain-values.ts";
 import type { UnsignedDeadlineTransaction } from "./deadline-creation.ts";
@@ -250,6 +250,48 @@ function completedTransaction(): {
   };
   return { build, completed };
 }
+
+function replaceWitnessLock(witness: string, lock: string): `0x${string}` {
+  const bytes = Uint8Array.from(Buffer.from(witness.slice(2), "hex"));
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const second = view.getUint32(8, true);
+  const third = view.getUint32(12, true);
+  const field = (start: number, end: number) =>
+    end === start ? "0x" : `0x${Buffer.from(bytes.slice(start + 4, end)).toString("hex")}`;
+  return serializeWitnessArgs({
+    lock,
+    inputType: field(second, third),
+    outputType: field(third, bytes.length),
+  }) as `0x${string}`;
+}
+
+test("wallet completion may add only the signature field to a reviewed policy witness", () => {
+  const { build, completed } = completedTransaction();
+  const funding = [
+    { outPoint: completed.inputs.at(-1)!.previousOutput, capacity: 50n, lockHash: fundingLockHash },
+  ];
+  const signed = {
+    ...completed,
+    witnesses: [
+      replaceWitnessLock(completed.witnesses[0]!, `0x${"00".repeat(65)}`),
+      ...completed.witnesses.slice(1),
+    ],
+  };
+  assert.doesNotThrow(() => verifyCompletedDaoHarvestV2Transaction(build, signed, funding));
+  assert.throws(() =>
+    verifyCompletedDaoHarvestV2Transaction(
+      build,
+      {
+        ...signed,
+        witnesses: [
+          serializeWitnessArgs({ lock: "", inputType: "0x01", outputType: "0x" }) as `0x${string}`,
+          ...signed.witnesses.slice(1),
+        ],
+      },
+      funding,
+    ),
+  );
+});
 
 test("wallet completion allows only reviewed funding, plain change, and the fee ceiling", () => {
   const { build, completed } = completedTransaction();

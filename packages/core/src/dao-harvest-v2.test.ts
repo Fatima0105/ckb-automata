@@ -14,17 +14,46 @@ import {
   DAO_HARVEST_V2_OPERATIONS,
   assertDaoHarvestV2WitnessLayout,
   decodeDaoHarvestV2CompensationLockArgs,
+  decodeDaoHarvestV2VaultLockArgs,
   deriveDaoHarvestV2FallbackOperatorSetHash,
   decodeDaoHarvestV2FallbackOperatorProof,
   encodeDaoHarvestV2FallbackOperatorProof,
   deriveDaoHarvestV2PayloadHash,
   deriveDaoHarvestV2PrepareCreditHash,
   deriveDaoHarvestV2ProgressHash,
+  deriveDaoHarvestV2VaultTermsHash,
   encodeDaoHarvestV2CompensationLockArgs,
+  encodeDaoHarvestV2VaultLockArgs,
   normalizeDaoHarvestV2FallbackOperators,
   type DaoHarvestV2Operation,
   type DaoHarvestV2WitnessIndices,
 } from "./dao-harvest-v2.ts";
+
+test("vault commitments use the contract-compatible domain and fixed args layout", () => {
+  const parts = Array.from({ length: 13 }, (_, index) => Uint8Array.of(index, index + 1));
+  const terms = deriveDaoHarvestV2VaultTermsHash(parts);
+  assert.equal(terms.length, 32);
+  assert.notDeepEqual(terms, deriveDaoHarvestV2VaultTermsHash(parts.toReversed()));
+  const values = Array.from({ length: 4 }, (_, index) =>
+    Uint8Array.from({ length: 32 }, () => index + 1),
+  );
+  const encoded = encodeDaoHarvestV2VaultLockArgs({
+    jobId: values[0]!,
+    ownerLockHash: values[1]!,
+    jobLockHash: values[2]!,
+    policyScriptHash: values[3]!,
+    immutableTermsHash: terms,
+  });
+  assert.equal(encoded.length, 160);
+  assert.deepEqual(decodeDaoHarvestV2VaultLockArgs(encoded), {
+    jobId: values[0],
+    ownerLockHash: values[1],
+    jobLockHash: values[2],
+    policyScriptHash: values[3],
+    immutableTermsHash: terms,
+  });
+  assert.throws(() => decodeDaoHarvestV2VaultLockArgs(encoded.slice(1)));
+});
 
 type Section = Record<string, string | number | string[]>;
 interface Fixture {

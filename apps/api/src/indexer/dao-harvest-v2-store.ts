@@ -61,11 +61,43 @@ function snapshotValues(snapshot: DaoHarvestV2Snapshot) {
   } as const;
 }
 
+function storedOutPointKey(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const item = value as Record<string, unknown>;
+  if (
+    typeof item["txHash"] !== "string" ||
+    !/^0x[0-9a-f]{64}$/.test(item["txHash"]) ||
+    typeof item["index"] !== "string" ||
+    !/^(0|[1-9][0-9]*)$/.test(item["index"])
+  ) {
+    throw new Error("stored V2 state contains an invalid outpoint");
+  }
+  return `${item["txHash"]}:${BigInt(item["index"]).toString()}`;
+}
+
 export class DaoHarvestV2ProjectionStore {
   readonly #database: AutomataDatabase;
 
   constructor(database: AutomataDatabase) {
     this.#database = database;
+  }
+
+  async trackedOutPoints(networkId: string): Promise<ReadonlySet<string>> {
+    const rows = await this.#database
+      .select({
+        job: daoHarvestV2Jobs.jobOutpoint,
+        vault: daoHarvestV2Jobs.vaultOutpoint,
+        compensation: daoHarvestV2Jobs.compensationOutpoint,
+      })
+      .from(daoHarvestV2Jobs)
+      .where(and(eq(daoHarvestV2Jobs.networkId, networkId), eq(daoHarvestV2Jobs.canonical, true)));
+    return new Set(
+      rows.flatMap((row) =>
+        [row.job, row.vault, row.compensation]
+          .map(storedOutPointKey)
+          .filter((key): key is string => key !== undefined),
+      ),
+    );
   }
 
   async append(

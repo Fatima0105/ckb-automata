@@ -30,6 +30,7 @@ test("projector finds a retained common ancestor and replays every replacement b
   let checkpoint = { blockNumber: 10n, blockHash: oldTen };
   const projected: bigint[] = [];
   const rollbackCalls: unknown[][] = [];
+  const ordering: string[] = [];
   const blocks = new Map([
     [9n, block(9n, commonNine, hash("08"))],
     [10n, block(10n, newTen, commonNine)],
@@ -50,6 +51,7 @@ test("projector finds a retained common ancestor and replays every replacement b
     } as never,
     {
       rollbackToParent: async (...args: unknown[]) => {
+        ordering.push("checkpoint-rollback");
         rollbackCalls.push(args);
         checkpoint = { blockNumber: 9n, blockHash: commonNine };
         return {
@@ -69,6 +71,18 @@ test("projector finds a retained common ancestor and replays every replacement b
       },
     } as never,
     { indexBlock: async () => ({ transitions: 0 }) } as never,
+    {
+      daoHarvestV2: {
+        rollback: async (_network: string, hashes: readonly string[]) => {
+          ordering.push(`v2-rollback:${hashes.join(",")}`);
+          return [];
+        },
+        projectBlock: async (candidate: { header: { number: bigint } }) => {
+          ordering.push(`v2-project:${candidate.header.number}`);
+          return { events: 0, partial: 0, snapshots: 0 };
+        },
+      },
+    },
   );
 
   const result = await projector.scanBlock(11n, { network: "ckb_testnet" } as never);
@@ -77,4 +91,10 @@ test("projector finds a retained common ancestor and replays every replacement b
   assert.deepEqual(projected, [10n, 11n]);
   assert.equal(result.rollback?.rolledBackBlocks, 1);
   assert.deepEqual(checkpoint, { blockNumber: 11n, blockHash: newEleven });
+  assert.deepEqual(ordering, [
+    `v2-rollback:${oldTen}`,
+    "checkpoint-rollback",
+    "v2-project:10",
+    "v2-project:11",
+  ]);
 });

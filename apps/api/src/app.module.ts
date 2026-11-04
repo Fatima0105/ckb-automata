@@ -17,8 +17,15 @@ import {
 import {
   DaoHarvestV2Controller,
   DaoHarvestV2MutationService,
+  DaoHarvestV2PendingService,
   DaoHarvestV2ReadService,
+  PostgresDaoHarvestV2PendingSource,
 } from "./dao-harvest-v2.ts";
+import { DaoHarvestV2TransactionAdapter } from "./dao-harvest-v2-adapter.ts";
+import {
+  loadVerifiedDaoHarvestV2Deployment,
+  type VerifiedDaoHarvestV2Deployment,
+} from "./dao-harvest-v2-manifest.ts";
 import {
   ActivityController,
   JobEventStreamController,
@@ -32,6 +39,8 @@ import { JobCellDiscovery } from "./indexer/job-discovery.ts";
 import { JobTransitionIndexer } from "./indexer/job-transitions.ts";
 import { CanonicalBlockProjector, JobProjectionRollback } from "./indexer/reorg.ts";
 import { DaoHarvestProjectionStore } from "./indexer/dao-harvest-projection.ts";
+import { DaoHarvestV2BlockIndexer } from "./indexer/dao-harvest-v2-indexer.ts";
+import { DaoHarvestV2ProjectionStore } from "./indexer/dao-harvest-v2-store.ts";
 import { LiveJobReconciler } from "./indexer/reconciliation.ts";
 import { LiveIndexerRuntime } from "./indexer/runtime.ts";
 import {
@@ -56,6 +65,9 @@ import {
 } from "./transaction-progress.ts";
 import { ApiTelemetryInterceptor, BackendTelemetry, MetricsController } from "./telemetry.ts";
 import { WebhookController, WebhookService } from "./webhooks.ts";
+
+const DAO_HARVEST_V2_DEPLOYMENT = Symbol("DAO_HARVEST_V2_DEPLOYMENT");
+const DAO_HARVEST_V2_INDEXER = Symbol("DAO_HARVEST_V2_INDEXER");
 
 // Nest uses the class identity as the root dependency-injection module token.
 // oxlint-disable-next-line typescript/no-extraneous-class
@@ -113,6 +125,18 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
         useFactory: () => createDatabaseClient(environment.DATABASE_URL),
       },
       {
+        provide: DAO_HARVEST_V2_DEPLOYMENT,
+        inject: [CkbClient],
+        useFactory: async (
+          ckbClient: CkbClient,
+        ): Promise<VerifiedDaoHarvestV2Deployment | undefined> => {
+          const path = environment.DAO_HARVEST_V2_MANIFEST_PATH;
+          return path === undefined
+            ? undefined
+            : loadVerifiedDaoHarvestV2Deployment(path, ckbClient, environment.CKB_GENESIS_HASH);
+        },
+      },
+      {
         provide: AuthService,
         inject: [DatabaseClient],
         useFactory: (databaseClient: DatabaseClient) =>
@@ -167,14 +191,62 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           new DaoHarvestProjectionStore(databaseClient.database),
       },
       {
-        provide: DaoHarvestV2ReadService,
+        provide: DaoHarvestV2ProjectionStore,
         inject: [DatabaseClient],
         useFactory: (databaseClient: DatabaseClient) =>
-          new DaoHarvestV2ReadService(databaseClient.database, environment.CKB_NETWORK),
+          new DaoHarvestV2ProjectionStore(databaseClient.database),
+      },
+      {
+        provide: DAO_HARVEST_V2_INDEXER,
+        inject: [CkbClient, DaoHarvestV2ProjectionStore, DAO_HARVEST_V2_DEPLOYMENT],
+        useFactory: (
+          ckbClient: CkbClient,
+          store: DaoHarvestV2ProjectionStore,
+          loaded: VerifiedDaoHarvestV2Deployment | undefined,
+        ) =>
+          loaded === undefined
+            ? undefined
+            : new DaoHarvestV2BlockIndexer(
+                ckbClient,
+                store,
+                environment.CKB_NETWORK,
+                loaded.deployment,
+              ),
+      },
+      {
+        provide: DaoHarvestV2ReadService,
+        inject: [DatabaseClient, CkbClient],
+        useFactory: (databaseClient: DatabaseClient, ckbClient: CkbClient) =>
+          new DaoHarvestV2ReadService(
+            databaseClient.database,
+            environment.CKB_NETWORK,
+            new DaoHarvestV2PendingService(
+              new PostgresDaoHarvestV2PendingSource(
+                databaseClient.database,
+                environment.CKB_NETWORK,
+                ckbClient,
+              ),
+            ),
+          ),
       },
       {
         provide: DaoHarvestV2MutationService,
-        useFactory: () => new DaoHarvestV2MutationService(),
+        inject: [CkbClient, DatabaseClient, DAO_HARVEST_V2_DEPLOYMENT],
+        useFactory: (
+          ckbClient: CkbClient,
+          databaseClient: DatabaseClient,
+          loaded: VerifiedDaoHarvestV2Deployment | undefined,
+        ) =>
+          new DaoHarvestV2MutationService(
+            loaded === undefined
+              ? undefined
+              : new DaoHarvestV2TransactionAdapter(
+                  ckbClient,
+                  loaded.deployment,
+                  databaseClient.database,
+                  environment.CKB_NETWORK,
+                ),
+          ),
       },
       {
         provide: CanonicalBlockProjector,
@@ -185,6 +257,7 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           JobCellDiscovery,
           JobTransitionIndexer,
           DaoHarvestProjectionStore,
+          DAO_HARVEST_V2_INDEXER,
           BackendTelemetry,
         ],
         useFactory: (
@@ -194,12 +267,14 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           discovery: JobCellDiscovery,
           transitions: JobTransitionIndexer,
           daoHarvest: DaoHarvestProjectionStore,
+          daoHarvestV2: DaoHarvestV2BlockIndexer | undefined,
           telemetry: BackendTelemetry,
         ) =>
           new CanonicalBlockProjector(ckbClient, checkpoints, rollback, discovery, transitions, {
             metrics: telemetry.metrics,
             telemetry: telemetry.runtime,
             daoHarvest,
+            ...(daoHarvestV2 === undefined ? {} : { daoHarvestV2 }),
           }),
       },
       {

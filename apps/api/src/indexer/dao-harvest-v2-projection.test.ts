@@ -33,6 +33,8 @@ import {
   type DaoHarvestV2ProjectionDeployment,
   type DaoHarvestV2ProjectionEvent,
 } from "./dao-harvest-v2-projection.ts";
+import { DaoHarvestV2BlockIndexer } from "./dao-harvest-v2-indexer.ts";
+import type { DaoHarvestV2Deployment } from "../dao-harvest-v2-adapter.ts";
 
 const hash = (value: string): Hash32 => parseHash32(`0x${value.repeat(64)}`);
 const script = (value: string, args = "0x"): ScriptIdentity => ({
@@ -43,9 +45,9 @@ const script = (value: string, args = "0x"): ScriptIdentity => ({
 const jobId = hash("a");
 const owner = hash("b");
 const payout = hash("c");
-const policy = script("d");
+const policy = script("d", hash("1"));
 const policyHash = parseHash32(scriptToHash(policy));
-const daoType = script("e");
+const daoType: ScriptIdentity = { codeHash: hash("e"), hashType: "type", args: "0x" };
 const deployment: DaoHarvestV2ProjectionDeployment = {
   networkId: "ckb_testnet",
   jobLock: script("1"),
@@ -198,6 +200,94 @@ test("extracts a fully bound V2 setup projection from chain bytes", () => {
   assert.equal(event.operatorWindow?.preferredFromSince, absoluteSince(100n));
   assert.equal(event.operatorWindow?.fallbackFromSince, absoluteSince(104n));
   assert.equal(event.operatorWindow?.prepareCutoffSince, absoluteSince(109n));
+});
+
+test("canonical V2 indexing resolves input evidence before storing a setup", async () => {
+  const { block } = setupBlock();
+  const appended: DaoHarvestV2ProjectionEvent[][] = [];
+  let resolutions = 0;
+  const fullDeployment: DaoHarvestV2Deployment = {
+    genesisHash: hash("0"),
+    secp256k1Blake160: {
+      codeHash: hash("9"),
+      hashType: "type",
+      cellDep: { outPoint: { txHash: hash("9"), index: "0x0" }, depType: "depGroup" },
+    },
+    nervosDao: {
+      codeHash: daoType.codeHash,
+      hashType: "type",
+      cellDep: { outPoint: { txHash: hash("e"), index: "0x0" }, depType: "code" },
+    },
+    contracts: {
+      jobLock: {
+        codeHash: deployment.jobLock.codeHash,
+        hashType: "data1",
+        cellDep: { outPoint: { txHash: hash("1"), index: "0x0" }, depType: "code" },
+      },
+      policy: {
+        codeHash: deployment.policy.codeHash,
+        hashType: "data1",
+        cellDep: { outPoint: { txHash: hash("d"), index: "0x0" }, depType: "code" },
+      },
+      vaultLock: {
+        codeHash: deployment.vaultLock.codeHash,
+        hashType: "data1",
+        cellDep: { outPoint: { txHash: hash("2"), index: "0x0" }, depType: "code" },
+      },
+      compensationLock: {
+        codeHash: deployment.compensationLock.codeHash,
+        hashType: "data1",
+        cellDep: { outPoint: { txHash: hash("3"), index: "0x0" }, depType: "code" },
+      },
+    },
+    preferredPrepareOperatorLockHash: hash("5"),
+    fallbackPrepareOperatorLockHashes: [hash("4")],
+  };
+  const indexer = new DaoHarvestV2BlockIndexer(
+    {
+      getTransactionStatus: async (transactionHash) => {
+        resolutions += 1;
+        return transactionHash.toString() === hash("6")
+          ? ({
+              transaction: {
+                outputs: [{ capacity: "0x64", lock: script("9"), type: undefined }],
+                outputsData: ["0x"],
+              },
+            } as never)
+          : undefined;
+      },
+    },
+    {
+      append: async (events) => {
+        appended.push([...events]);
+        return events.map((event) => ({ jobId: event.jobId })) as never;
+      },
+      reset: async () => [],
+      rollback: async () => [],
+      trackedOutPoints: async () => new Set(),
+    },
+    "ckb_testnet",
+    fullDeployment,
+  );
+  const result = await indexer.projectBlock(block as never);
+  assert.deepEqual(result, { events: 1, partial: 0, snapshots: 1 });
+  assert.equal(appended[0]?.[0]?.operation, "setup");
+  assert.equal(resolutions, 1);
+
+  const unrelated = await indexer.projectBlock({
+    header: { hash: hash("8"), number: "0x65" },
+    transactions: [
+      {
+        hash: () => hash("9"),
+        inputs: [{ previousOutput: { txHash: hash("0"), index: "0x0" } }],
+        outputs: [{ capacity: "0x64", lock: script("8"), type: undefined }],
+        outputsData: ["0x"],
+        witnesses: ["0x"],
+      },
+    ],
+  } as never);
+  assert.deepEqual(unrelated, { events: 0, partial: 0, snapshots: 0 });
+  assert.equal(resolutions, 1);
 });
 
 function absoluteSince(number: bigint): string {

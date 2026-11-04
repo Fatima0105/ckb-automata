@@ -3,6 +3,7 @@ import { PERSONAL, blake2b } from "@nervosnetwork/ckb-sdk-utils";
 export const DAO_HARVEST_V2_VERSION = 2 as const;
 export const DAO_HARVEST_V2_ABSENT_INDEX = 0xffff_ffff as const;
 export const DAO_HARVEST_V2_COMPENSATION_ARGS_BYTES = 160 as const;
+export const DAO_HARVEST_V2_VAULT_ARGS_BYTES = 160 as const;
 export const MAX_DAO_HARVEST_V2_FALLBACK_OPERATORS = 8 as const;
 
 export const DAO_HARVEST_V2_DOMAINS = Object.freeze({
@@ -10,6 +11,7 @@ export const DAO_HARVEST_V2_DOMAINS = Object.freeze({
   progress: "ckb-automata/dao-harvest-progress/v2",
   prepareCredit: "ckb-automata/dao-harvest-prepare-credit/v2",
   fallbackSet: "ckb-automata/dao-harvest-fallback-set/v2",
+  vaultTerms: "ckb-automata/dao-harvest-vault-terms/v2",
   intent: "ckb-automata/dao-harvest-intent/v2",
 } as const);
 
@@ -76,6 +78,10 @@ export function deriveDaoHarvestV2PrepareCreditHash(credit: Uint8Array): Uint8Ar
 
 export function deriveDaoHarvestV2IntentHash(intent: Uint8Array): Uint8Array {
   return hashDomain(DAO_HARVEST_V2_DOMAINS.intent, [intent]);
+}
+
+export function deriveDaoHarvestV2VaultTermsHash(parts: readonly Uint8Array[]): Uint8Array {
+  return hashDomain(DAO_HARVEST_V2_DOMAINS.vaultTerms, parts);
 }
 
 function compareBytes(left: Uint8Array, right: Uint8Array): number {
@@ -186,6 +192,41 @@ export function decodeDaoHarvestV2CompensationLockArgs(
     payoutLockHash: part(2),
     policyScriptHash: part(3),
     payloadHash: part(4),
+  });
+}
+
+export interface DaoHarvestV2VaultLockArgs {
+  readonly jobId: Uint8Array;
+  readonly ownerLockHash: Uint8Array;
+  readonly jobLockHash: Uint8Array;
+  readonly policyScriptHash: Uint8Array;
+  readonly immutableTermsHash: Uint8Array;
+}
+
+export function encodeDaoHarvestV2VaultLockArgs(input: DaoHarvestV2VaultLockArgs): Uint8Array {
+  const parts = [
+    byte32(input.jobId, "jobId"),
+    byte32(input.ownerLockHash, "ownerLockHash"),
+    byte32(input.jobLockHash, "jobLockHash"),
+    byte32(input.policyScriptHash, "policyScriptHash"),
+    byte32(input.immutableTermsHash, "immutableTermsHash"),
+  ];
+  const encoded = new Uint8Array(DAO_HARVEST_V2_VAULT_ARGS_BYTES);
+  parts.forEach((part, index) => encoded.set(part, index * BYTE32_LENGTH));
+  return encoded;
+}
+
+export function decodeDaoHarvestV2VaultLockArgs(encoded: Uint8Array): DaoHarvestV2VaultLockArgs {
+  if (encoded.length !== DAO_HARVEST_V2_VAULT_ARGS_BYTES) {
+    throw new RangeError("Harvest Vault Lock args must contain exactly 160 bytes");
+  }
+  const part = (index: number) => encoded.slice(index * BYTE32_LENGTH, (index + 1) * BYTE32_LENGTH);
+  return Object.freeze({
+    jobId: part(0),
+    ownerLockHash: part(1),
+    jobLockHash: part(2),
+    policyScriptHash: part(3),
+    immutableTermsHash: part(4),
   });
 }
 

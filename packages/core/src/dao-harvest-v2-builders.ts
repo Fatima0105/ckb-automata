@@ -322,6 +322,33 @@ function sameInput(left: UnsignedCellInput, right: UnsignedCellInput): boolean {
   return stable(left) === stable(right);
 }
 
+function witnessPolicyFields(value: Hex): { readonly inputType: Hex; readonly outputType: Hex } {
+  const witnessBytes = hexToBytes(value);
+  if (witnessBytes.length < 16) throw new Error("wallet returned an invalid reviewed witness");
+  const view = new DataView(witnessBytes.buffer, witnessBytes.byteOffset, witnessBytes.byteLength);
+  const total = view.getUint32(0, true);
+  const first = view.getUint32(4, true);
+  const second = view.getUint32(8, true);
+  const third = view.getUint32(12, true);
+  if (
+    total !== witnessBytes.length ||
+    first !== 16 ||
+    second < first ||
+    third < second ||
+    third > total
+  ) {
+    throw new Error("wallet returned an invalid reviewed witness");
+  }
+  const field = (start: number, end: number): Hex => {
+    if (start === end) return "0x";
+    if (end - start < 4 || view.getUint32(start, true) !== end - start - 4) {
+      throw new Error("wallet returned an invalid reviewed witness");
+    }
+    return bytesToHex(witnessBytes.slice(start + 4, end)) as Hex;
+  };
+  return Object.freeze({ inputType: field(second, third), outputType: field(third, total) });
+}
+
 function outPointKey(value: UnsignedCellInput["previousOutput"]): string {
   return `${value.txHash}:${BigInt(value.index).toString()}`;
 }
@@ -367,7 +394,11 @@ export function verifyCompletedDaoHarvestV2Transaction(
     }
   });
   build.transaction.witnesses.forEach((required, index) => {
-    if (completed.witnesses[index] !== required) {
+    const actual = completed.witnesses[index];
+    if (
+      actual === undefined ||
+      stable(witnessPolicyFields(actual)) !== stable(witnessPolicyFields(required))
+    ) {
       throw new Error(`wallet changed reviewed witness ${index}`);
     }
   });

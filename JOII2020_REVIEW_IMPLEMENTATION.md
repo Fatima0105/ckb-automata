@@ -314,19 +314,19 @@ If the preferred operator stops:
 
 Each stage is implemented, tested, audited, and corrected before dependent work begins.
 
-| Stage                                   | Status   | Evidence                                                            |
-| --------------------------------------- | -------- | ------------------------------------------------------------------- |
-| 1. Requirements and economic rules      | Complete | ADRs 0009-0011, V2 requirements, vocabulary and documentation tests |
-| 2. Transaction boundaries               | Pending  | Not started                                                         |
-| 3. Compensation and reward prototypes   | Pending  | Not started                                                         |
-| 4. V2 schemas and fixtures              | Pending  | Not started                                                         |
-| 5. V2 contracts                         | Pending  | Not started                                                         |
-| 6. SDK builders and wallet review       | Pending  | Not started                                                         |
-| 7. Executor scheduling and submission   | Pending  | Not started                                                         |
-| 8. API, indexer and database            | Pending  | Not started                                                         |
-| 9. User interfaces                      | Pending  | Not started                                                         |
-| 10. External operator package and drill | Pending  | Not started                                                         |
-| 11. Testnet deployment and soak         | Pending  | Not started                                                         |
+| Stage                                   | Status   | Evidence                                                             |
+| --------------------------------------- | -------- | -------------------------------------------------------------------- |
+| 1. Requirements and economic rules      | Complete | ADRs 0009-0011, V2 requirements, vocabulary and documentation tests  |
+| 2. Transaction boundaries               | Complete | Signed-byte, dry-run cycle, fee, shape and one-job guards documented |
+| 3. Compensation and reward prototypes   | Pending  | Not started                                                          |
+| 4. V2 schemas and fixtures              | Pending  | Not started                                                          |
+| 5. V2 contracts                         | Pending  | Not started                                                          |
+| 6. SDK builders and wallet review       | Pending  | Not started                                                          |
+| 7. Executor scheduling and submission   | Pending  | Not started                                                          |
+| 8. API, indexer and database            | Pending  | Not started                                                          |
+| 9. User interfaces                      | Pending  | Not started                                                          |
+| 10. External operator package and drill | Pending  | Not started                                                          |
+| 11. Testnet deployment and soak         | Pending  | Not started                                                          |
 
 ### Stage 1: Freeze Requirements and Economic Rules
 
@@ -528,7 +528,7 @@ The final report must publish:
 | Operator payment representation | Accepted for prototype | Same-lock ordinary identity accumulator; prove capacity behavior in Stage 3                    |
 | Preferred claimant              | Accepted               | The confirmed preparer receives the first claim window                                         |
 | Prepare fallback set            | Accepted               | One through eight sorted unique operators opening simultaneously at takeover                   |
-| Safe takeover interval          | Pending                | Select from measured transaction and confirmation boundaries in Stage 2                        |
+| Safe takeover interval          | Accepted               | Minimum `1/20` canonical epoch plus pending-transaction and canonical-input reload guards      |
 | Owner claim timing              | Accepted               | Owner completion and recovery are available at maturity without waiting for fallback           |
 
 Every pending decision requires written reasoning, adversarial cases, occupied-capacity impact, and

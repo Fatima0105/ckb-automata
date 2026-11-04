@@ -89,6 +89,8 @@ only after the Stage 3 local-chain prototype and Stage 4 schema review.
 - One job and one transition per transaction.
 - No cross-user or cross-job batching.
 - Exact operation-specific byte, cycle, and fee ceilings are mandatory before public submission.
+- The minimum preferred-operator interval is `1/20` of a canonical epoch; applications may commit a
+  longer interval but never a shorter one.
 - Executors reload inputs and headers, rebuild only their fee inputs/change, dry-run, and sign once.
 - After broadcast, executors observe the transaction and do not promise cancellation.
 - A conflicting owner or executor transaction may win; the loser reloads canonical state and does
@@ -146,6 +148,9 @@ terminal reserve.
 | `compensation_seed_capacity` | Recoverable reserve   | Owner-funded capacity required to keep the Compensation Cell valid    |
 | `compensation_cell`          | Compensation balance  | Job-bound Cell that accumulates the user's net compensation           |
 | `claim_takeover`             | Backup available time | Earliest chain time at which compatible executors may take over claim |
+
+The complete transaction ceilings and takeover rationale are maintained in
+[`dao-harvest-v2-transaction-boundaries.md`](../testing/dao-harvest-v2-transaction-boundaries.md).
 
 The UI must not call the recoverable reserve a charge, describe a maximum charge as guaranteed, or
 claim that a broadcast transaction can be cancelled.

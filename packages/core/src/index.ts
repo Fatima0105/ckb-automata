@@ -243,6 +243,19 @@ export {
 } from "./quotes.ts";
 
 export {
+  HARVEST_V2_TRANSACTION_LIMITS,
+  HARVEST_V2_TRANSACTION_OPERATIONS,
+  HarvestV2TransactionLimitError,
+  assertHarvestV2TransactionWithinLimits,
+  serializedTransactionBytes,
+  type HarvestV2TransactionBoundaryEvidence,
+  type HarvestV2TransactionBoundaryInput,
+  type HarvestV2TransactionLimit,
+  type HarvestV2TransactionLimitErrorCode,
+  type HarvestV2TransactionOperation,
+} from "./harvest-v2-transaction-limits.ts";
+
+export {
   DEADLINE_CREATION_INTENT_DOMAIN,
   assertDeadlineCompletion,
   buildDeadlineCreation,

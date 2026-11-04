@@ -9,22 +9,24 @@ limit is exceeded.
 
 ## Operation ceilings
 
-| Operation | Bytes |    Cycles | Fee rate (shannons/KB) | Fee (shannons) | Inputs | Outputs | Headers | Cell deps | Job inputs |
-| --------- | ----: | --------: | ---------------------: | -------------: | -----: | ------: | ------: | --------: | ---------: |
-| Setup     | 4,096 | 3,000,000 |                100,000 |        409,600 |     16 |       8 |       0 |         8 |          1 |
-| Prepare   | 3,072 | 1,200,000 |                100,000 |        307,200 |      4 |       4 |       1 |         8 |          1 |
-| Claim     | 4,096 | 4,000,000 |                100,000 |        409,600 |      8 |       8 |       2 |         8 |          1 |
-| Sweep     | 2,048 | 2,500,000 |                100,000 |        204,800 |      3 |       3 |       0 |         6 |          1 |
-| Rotation  | 3,072 | 3,000,000 |                100,000 |        307,200 |      3 |       3 |       0 |         8 |          1 |
-| Recovery  | 4,096 | 4,000,000 |                100,000 |        409,600 |      6 |       6 |       2 |         8 |          1 |
+| Operation | Bytes |    Cycles | Fee rate (shannons/KB) | Fee (shannons) | Inputs | Outputs | Headers | Cell deps | Job Cells               |
+| --------- | ----: | --------: | ---------------------: | -------------: | -----: | ------: | ------: | --------: | ----------------------- |
+| Setup     | 4,096 | 3,000,000 |                100,000 |        409,600 |     16 |       8 |       0 |         8 | 0 inputs / 1 output     |
+| Prepare   | 3,072 | 1,200,000 |                100,000 |        307,200 |      4 |       4 |       1 |         8 | 1 input / 1 output      |
+| Claim     | 4,096 | 4,000,000 |                100,000 |        409,600 |      8 |       8 |       2 |         8 | 1 input / 0 or 1 output |
+| Sweep     | 2,048 | 2,500,000 |                100,000 |        204,800 |      3 |       3 |       0 |         6 | 1 input / 1 output      |
+| Rotation  | 3,072 | 3,000,000 |                100,000 |        307,200 |      3 |       3 |       0 |         8 | 1 input / 1 output      |
+| Recovery  | 4,096 | 4,000,000 |                100,000 |        409,600 |      6 |       6 |       2 |         8 | 1 input / 0 outputs     |
 
 The fee ceiling is `ceil(maximum_bytes * maximum_fee_rate / 1,000)`. It is an executor network-fee
 limit, not a service charge. Operators fund this fee from their own inputs. A transaction must stay
 within both the fee-rate limit and the absolute fee limit.
 
-Every operation consumes exactly one Job Cell. Zero Job inputs are not a V2 operation; multiple Job
-inputs are forbidden even when the byte and cycle totals remain below their limits. Cross-job and
-cross-user batching is therefore rejected before signing.
+Setup consumes no Job Cell and creates exactly one. Every later operation consumes exactly one Job
+Cell. Prepare, sweep, and rotation create one successor; claim creates one except on the final cycle;
+recovery and terminal claim create none. Multiple Job inputs or outputs are forbidden even when byte
+and cycle totals remain below their limits, so cross-job and cross-user batching rejects before
+signing.
 
 ## Evidence and margins
 

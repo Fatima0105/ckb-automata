@@ -46,7 +46,8 @@ function boundaryInput(
     dryRunCycles: limits.maximumCycles,
     feeRatePerKilobyte: feeRate,
     networkFee: (measuredBytes * BigInt(feeRate) + 999n) / 1_000n,
-    jobInputCount: 1,
+    jobInputCount: limits.requiredJobInputs,
+    jobOutputCount: limits.permittedJobOutputs[0]!,
     ...override,
   } as const;
 }
@@ -184,12 +185,23 @@ test("operation shape limits reject one extra input, output, header, or dependen
   );
 });
 
-test("zero or multiple Job Cell inputs reject cross-job batching", () => {
+test("setup creates the initial Job while transitions reject cross-job batching", () => {
+  assertHarvestV2TransactionWithinLimits(
+    boundaryInput("setup", { jobInputCount: 0, jobOutputCount: 1 }),
+  );
+  expectCode("HARVEST_V2_JOB_INPUT_COUNT_INVALID", () =>
+    assertHarvestV2TransactionWithinLimits(boundaryInput("setup", { jobInputCount: 1 })),
+  );
   for (const jobInputCount of [0, 2]) {
     expectCode("HARVEST_V2_JOB_INPUT_COUNT_INVALID", () =>
       assertHarvestV2TransactionWithinLimits(boundaryInput("recovery", { jobInputCount })),
     );
   }
+  expectCode("HARVEST_V2_JOB_OUTPUT_COUNT_INVALID", () =>
+    assertHarvestV2TransactionWithinLimits(boundaryInput("prepare", { jobOutputCount: 0 })),
+  );
+  assertHarvestV2TransactionWithinLimits(boundaryInput("claim", { jobOutputCount: 0 }));
+  assertHarvestV2TransactionWithinLimits(boundaryInput("claim", { jobOutputCount: 1 }));
 });
 
 test("limits retain auditable margins over measured v1 policy paths", () => {

@@ -23,7 +23,8 @@ export interface HarvestV2TransactionLimit {
   readonly maximumOutputs: number;
   readonly maximumHeaderDeps: number;
   readonly maximumCellDeps: number;
-  readonly requiredJobInputs: 1;
+  readonly requiredJobInputs: 0 | 1;
+  readonly permittedJobOutputs: readonly (0 | 1)[];
 }
 
 const MAXIMUM_FEE_RATE = 100_000n;
@@ -35,6 +36,8 @@ function limit(
   maximumOutputs: number,
   maximumHeaderDeps: number,
   maximumCellDeps: number,
+  requiredJobInputs: 0 | 1,
+  permittedJobOutputs: readonly (0 | 1)[],
 ): HarvestV2TransactionLimit {
   return Object.freeze({
     maximumBytes,
@@ -45,17 +48,18 @@ function limit(
     maximumOutputs,
     maximumHeaderDeps,
     maximumCellDeps,
-    requiredJobInputs: 1,
+    requiredJobInputs,
+    permittedJobOutputs: Object.freeze([...permittedJobOutputs]),
   });
 }
 
 export const HARVEST_V2_TRANSACTION_LIMITS = Object.freeze({
-  setup: limit(4_096n, 3_000_000n, 16, 8, 0, 8),
-  prepare: limit(3_072n, 1_200_000n, 4, 4, 1, 8),
-  claim: limit(4_096n, 4_000_000n, 8, 8, 2, 8),
-  sweep: limit(2_048n, 2_500_000n, 3, 3, 0, 6),
-  rotation: limit(3_072n, 3_000_000n, 3, 3, 0, 8),
-  recovery: limit(4_096n, 4_000_000n, 6, 6, 2, 8),
+  setup: limit(4_096n, 3_000_000n, 16, 8, 0, 8, 0, [1]),
+  prepare: limit(3_072n, 1_200_000n, 4, 4, 1, 8, 1, [1]),
+  claim: limit(4_096n, 4_000_000n, 8, 8, 2, 8, 1, [0, 1]),
+  sweep: limit(2_048n, 2_500_000n, 3, 3, 0, 6, 1, [1]),
+  rotation: limit(3_072n, 3_000_000n, 3, 3, 0, 8, 1, [1]),
+  recovery: limit(4_096n, 4_000_000n, 6, 6, 2, 8, 1, [0]),
 } satisfies Readonly<Record<HarvestV2TransactionOperation, HarvestV2TransactionLimit>>);
 
 export type HarvestV2TransactionLimitErrorCode =
@@ -67,7 +71,8 @@ export type HarvestV2TransactionLimitErrorCode =
   | "HARVEST_V2_OUTPUTS_EXCEEDED"
   | "HARVEST_V2_HEADER_DEPS_EXCEEDED"
   | "HARVEST_V2_CELL_DEPS_EXCEEDED"
-  | "HARVEST_V2_JOB_INPUT_COUNT_INVALID";
+  | "HARVEST_V2_JOB_INPUT_COUNT_INVALID"
+  | "HARVEST_V2_JOB_OUTPUT_COUNT_INVALID";
 
 export class HarvestV2TransactionLimitError extends Error {
   readonly code: HarvestV2TransactionLimitErrorCode;
@@ -104,6 +109,7 @@ export interface HarvestV2TransactionBoundaryInput {
   readonly feeRatePerKilobyte: IntegerInput;
   readonly networkFee: IntegerInput;
   readonly jobInputCount: number;
+  readonly jobOutputCount: number;
 }
 
 export interface HarvestV2TransactionBoundaryEvidence {
@@ -185,7 +191,14 @@ export function assertHarvestV2TransactionWithinLimits(
       input.jobInputCount === limits.requiredJobInputs,
       new HarvestV2TransactionLimitError(
         "HARVEST_V2_JOB_INPUT_COUNT_INVALID",
-        `${input.operation} must consume exactly one Job Cell`,
+        `${input.operation} must consume exactly ${limits.requiredJobInputs} Job Cell(s)`,
+      ),
+    ],
+    [
+      limits.permittedJobOutputs.includes(input.jobOutputCount as 0 | 1),
+      new HarvestV2TransactionLimitError(
+        "HARVEST_V2_JOB_OUTPUT_COUNT_INVALID",
+        `${input.operation} has an invalid Job Cell successor count`,
       ),
     ],
   ];

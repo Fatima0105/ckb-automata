@@ -92,7 +92,30 @@ export interface DaoHarvestV2UnsignedBuild {
   readonly operation: DaoHarvestV2BuildOperation;
   readonly transaction: unknown;
   readonly intentHash: string;
-  readonly review: unknown;
+  readonly payloadHash: string;
+  readonly progressHash: string;
+  readonly prepareCreditHash: string;
+  readonly review: {
+    readonly originalAmount: string;
+    readonly expectedCompensation: string;
+    readonly completedWorkCharges: {
+      readonly prepare: string;
+      readonly claim: string;
+      readonly maximumTotal: string;
+    };
+    readonly maximumNetworkFee: string;
+    readonly recoverableReserve: string;
+    readonly accumulatedCompensation: string;
+    readonly totalLockedAmount: string;
+    readonly notes: readonly string[];
+  };
+  readonly completion: {
+    readonly requiredInputCount: number;
+    readonly requiredOutputCount: number;
+    readonly requiredInputCapacity: string;
+    readonly maximumFee: string;
+    readonly allowedFundingLockHashes: readonly string[];
+  };
 }
 
 export interface DaoHarvestV2MutationAdapter {
@@ -515,13 +538,73 @@ const quoteV2Schema: SchemaObject = {
 
 const unsignedBuildV2Schema: SchemaObject = {
   type: "object",
-  required: ["version", "operation", "transaction", "intentHash", "review"],
+  required: [
+    "version",
+    "operation",
+    "transaction",
+    "intentHash",
+    "payloadHash",
+    "progressHash",
+    "prepareCreditHash",
+    "review",
+    "completion",
+  ],
   properties: {
     version: { type: "integer", enum: [2] },
     operation: { type: "string", enum: ["setup", "sweep", "close", "rotate", "recover"] },
     transaction: { type: "object", additionalProperties: true },
     intentHash: hashSchema,
-    review: { type: "object", additionalProperties: true },
+    payloadHash: hashSchema,
+    progressHash: hashSchema,
+    prepareCreditHash: hashSchema,
+    review: {
+      type: "object",
+      required: [
+        "originalAmount",
+        "expectedCompensation",
+        "completedWorkCharges",
+        "maximumNetworkFee",
+        "recoverableReserve",
+        "accumulatedCompensation",
+        "totalLockedAmount",
+        "notes",
+      ],
+      properties: {
+        originalAmount: decimalSchema,
+        expectedCompensation: decimalSchema,
+        completedWorkCharges: {
+          type: "object",
+          required: ["prepare", "claim", "maximumTotal"],
+          properties: {
+            prepare: decimalSchema,
+            claim: decimalSchema,
+            maximumTotal: decimalSchema,
+          },
+        },
+        maximumNetworkFee: decimalSchema,
+        recoverableReserve: decimalSchema,
+        accumulatedCompensation: decimalSchema,
+        totalLockedAmount: decimalSchema,
+        notes: { type: "array", items: { type: "string" } },
+      },
+    },
+    completion: {
+      type: "object",
+      required: [
+        "requiredInputCount",
+        "requiredOutputCount",
+        "requiredInputCapacity",
+        "maximumFee",
+        "allowedFundingLockHashes",
+      ],
+      properties: {
+        requiredInputCount: { type: "integer", minimum: 0 },
+        requiredOutputCount: { type: "integer", minimum: 0 },
+        requiredInputCapacity: decimalSchema,
+        maximumFee: decimalSchema,
+        allowedFundingLockHashes: { type: "array", items: hashSchema },
+      },
+    },
   },
 };
 

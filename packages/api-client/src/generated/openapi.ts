@@ -1571,11 +1571,32 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": {
+                        readonly completion: {
+                            readonly allowedFundingLockHashes: readonly string[];
+                            readonly maximumFee: string;
+                            readonly requiredInputCapacity: string;
+                            readonly requiredInputCount: number;
+                            readonly requiredOutputCount: number;
+                        };
                         readonly intentHash: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly payloadHash: string;
+                        readonly prepareCreditHash: string;
+                        readonly progressHash: string;
                         readonly review: {
-                            readonly [key: string]: unknown;
+                            readonly accumulatedCompensation: string;
+                            readonly completedWorkCharges: {
+                                readonly claim: string;
+                                readonly maximumTotal: string;
+                                readonly prepare: string;
+                            };
+                            readonly expectedCompensation: string;
+                            readonly maximumNetworkFee: string;
+                            readonly notes: readonly string[];
+                            readonly originalAmount: string;
+                            readonly recoverableReserve: string;
+                            readonly totalLockedAmount: string;
                         };
                         readonly transaction: {
                             readonly [key: string]: unknown;
@@ -1606,11 +1627,32 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": {
+                        readonly completion: {
+                            readonly allowedFundingLockHashes: readonly string[];
+                            readonly maximumFee: string;
+                            readonly requiredInputCapacity: string;
+                            readonly requiredInputCount: number;
+                            readonly requiredOutputCount: number;
+                        };
                         readonly intentHash: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly payloadHash: string;
+                        readonly prepareCreditHash: string;
+                        readonly progressHash: string;
                         readonly review: {
-                            readonly [key: string]: unknown;
+                            readonly accumulatedCompensation: string;
+                            readonly completedWorkCharges: {
+                                readonly claim: string;
+                                readonly maximumTotal: string;
+                                readonly prepare: string;
+                            };
+                            readonly expectedCompensation: string;
+                            readonly maximumNetworkFee: string;
+                            readonly notes: readonly string[];
+                            readonly originalAmount: string;
+                            readonly recoverableReserve: string;
+                            readonly totalLockedAmount: string;
                         };
                         readonly transaction: {
                             readonly [key: string]: unknown;
@@ -1641,11 +1683,32 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": {
+                        readonly completion: {
+                            readonly allowedFundingLockHashes: readonly string[];
+                            readonly maximumFee: string;
+                            readonly requiredInputCapacity: string;
+                            readonly requiredInputCount: number;
+                            readonly requiredOutputCount: number;
+                        };
                         readonly intentHash: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly payloadHash: string;
+                        readonly prepareCreditHash: string;
+                        readonly progressHash: string;
                         readonly review: {
-                            readonly [key: string]: unknown;
+                            readonly accumulatedCompensation: string;
+                            readonly completedWorkCharges: {
+                                readonly claim: string;
+                                readonly maximumTotal: string;
+                                readonly prepare: string;
+                            };
+                            readonly expectedCompensation: string;
+                            readonly maximumNetworkFee: string;
+                            readonly notes: readonly string[];
+                            readonly originalAmount: string;
+                            readonly recoverableReserve: string;
+                            readonly totalLockedAmount: string;
                         };
                         readonly transaction: {
                             readonly [key: string]: unknown;
@@ -1676,11 +1739,32 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": {
+                        readonly completion: {
+                            readonly allowedFundingLockHashes: readonly string[];
+                            readonly maximumFee: string;
+                            readonly requiredInputCapacity: string;
+                            readonly requiredInputCount: number;
+                            readonly requiredOutputCount: number;
+                        };
                         readonly intentHash: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly payloadHash: string;
+                        readonly prepareCreditHash: string;
+                        readonly progressHash: string;
                         readonly review: {
-                            readonly [key: string]: unknown;
+                            readonly accumulatedCompensation: string;
+                            readonly completedWorkCharges: {
+                                readonly claim: string;
+                                readonly maximumTotal: string;
+                                readonly prepare: string;
+                            };
+                            readonly expectedCompensation: string;
+                            readonly maximumNetworkFee: string;
+                            readonly notes: readonly string[];
+                            readonly originalAmount: string;
+                            readonly recoverableReserve: string;
+                            readonly totalLockedAmount: string;
                         };
                         readonly transaction: {
                             readonly [key: string]: unknown;
@@ -1711,11 +1795,32 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": {
+                        readonly completion: {
+                            readonly allowedFundingLockHashes: readonly string[];
+                            readonly maximumFee: string;
+                            readonly requiredInputCapacity: string;
+                            readonly requiredInputCount: number;
+                            readonly requiredOutputCount: number;
+                        };
                         readonly intentHash: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
+                        readonly payloadHash: string;
+                        readonly prepareCreditHash: string;
+                        readonly progressHash: string;
                         readonly review: {
-                            readonly [key: string]: unknown;
+                            readonly accumulatedCompensation: string;
+                            readonly completedWorkCharges: {
+                                readonly claim: string;
+                                readonly maximumTotal: string;
+                                readonly prepare: string;
+                            };
+                            readonly expectedCompensation: string;
+                            readonly maximumNetworkFee: string;
+                            readonly notes: readonly string[];
+                            readonly originalAmount: string;
+                            readonly recoverableReserve: string;
+                            readonly totalLockedAmount: string;
                         };
                         readonly transaction: {
                             readonly [key: string]: unknown;

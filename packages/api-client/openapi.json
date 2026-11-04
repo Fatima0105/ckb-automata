@@ -1129,16 +1129,88 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "completion": {
+                      "properties": {
+                        "allowedFundingLockHashes": {
+                          "items": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "type": "array"
+                        },
+                        "maximumFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "requiredInputCapacity": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "requiredInputCount": { "minimum": 0, "type": "integer" },
+                        "requiredOutputCount": { "minimum": 0, "type": "integer" }
+                      },
+                      "required": [
+                        "requiredInputCount",
+                        "requiredOutputCount",
+                        "requiredInputCapacity",
+                        "maximumFee",
+                        "allowedFundingLockHashes"
+                      ],
+                      "type": "object"
+                    },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
                     },
-                    "review": { "additionalProperties": true, "type": "object" },
+                    "payloadHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "prepareCreditHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "progressHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "review": {
+                      "properties": {
+                        "accumulatedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "completedWorkCharges": {
+                          "properties": {
+                            "claim": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "maximumTotal": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "prepare": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                          },
+                          "required": ["prepare", "claim", "maximumTotal"],
+                          "type": "object"
+                        },
+                        "expectedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "maximumNetworkFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "notes": { "items": { "type": "string" }, "type": "array" },
+                        "originalAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "recoverableReserve": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "totalLockedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                      },
+                      "required": [
+                        "originalAmount",
+                        "expectedCompensation",
+                        "completedWorkCharges",
+                        "maximumNetworkFee",
+                        "recoverableReserve",
+                        "accumulatedCompensation",
+                        "totalLockedAmount",
+                        "notes"
+                      ],
+                      "type": "object"
+                    },
                     "transaction": { "additionalProperties": true, "type": "object" },
                     "version": { "enum": [2], "type": "integer" }
                   },
-                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "required": [
+                    "version",
+                    "operation",
+                    "transaction",
+                    "intentHash",
+                    "payloadHash",
+                    "progressHash",
+                    "prepareCreditHash",
+                    "review",
+                    "completion"
+                  ],
                   "type": "object"
                 }
               }
@@ -1164,16 +1236,88 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "completion": {
+                      "properties": {
+                        "allowedFundingLockHashes": {
+                          "items": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "type": "array"
+                        },
+                        "maximumFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "requiredInputCapacity": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "requiredInputCount": { "minimum": 0, "type": "integer" },
+                        "requiredOutputCount": { "minimum": 0, "type": "integer" }
+                      },
+                      "required": [
+                        "requiredInputCount",
+                        "requiredOutputCount",
+                        "requiredInputCapacity",
+                        "maximumFee",
+                        "allowedFundingLockHashes"
+                      ],
+                      "type": "object"
+                    },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
                     },
-                    "review": { "additionalProperties": true, "type": "object" },
+                    "payloadHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "prepareCreditHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "progressHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "review": {
+                      "properties": {
+                        "accumulatedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "completedWorkCharges": {
+                          "properties": {
+                            "claim": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "maximumTotal": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "prepare": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                          },
+                          "required": ["prepare", "claim", "maximumTotal"],
+                          "type": "object"
+                        },
+                        "expectedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "maximumNetworkFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "notes": { "items": { "type": "string" }, "type": "array" },
+                        "originalAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "recoverableReserve": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "totalLockedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                      },
+                      "required": [
+                        "originalAmount",
+                        "expectedCompensation",
+                        "completedWorkCharges",
+                        "maximumNetworkFee",
+                        "recoverableReserve",
+                        "accumulatedCompensation",
+                        "totalLockedAmount",
+                        "notes"
+                      ],
+                      "type": "object"
+                    },
                     "transaction": { "additionalProperties": true, "type": "object" },
                     "version": { "enum": [2], "type": "integer" }
                   },
-                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "required": [
+                    "version",
+                    "operation",
+                    "transaction",
+                    "intentHash",
+                    "payloadHash",
+                    "progressHash",
+                    "prepareCreditHash",
+                    "review",
+                    "completion"
+                  ],
                   "type": "object"
                 }
               }
@@ -1199,16 +1343,88 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "completion": {
+                      "properties": {
+                        "allowedFundingLockHashes": {
+                          "items": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "type": "array"
+                        },
+                        "maximumFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "requiredInputCapacity": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "requiredInputCount": { "minimum": 0, "type": "integer" },
+                        "requiredOutputCount": { "minimum": 0, "type": "integer" }
+                      },
+                      "required": [
+                        "requiredInputCount",
+                        "requiredOutputCount",
+                        "requiredInputCapacity",
+                        "maximumFee",
+                        "allowedFundingLockHashes"
+                      ],
+                      "type": "object"
+                    },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
                     },
-                    "review": { "additionalProperties": true, "type": "object" },
+                    "payloadHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "prepareCreditHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "progressHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "review": {
+                      "properties": {
+                        "accumulatedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "completedWorkCharges": {
+                          "properties": {
+                            "claim": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "maximumTotal": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "prepare": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                          },
+                          "required": ["prepare", "claim", "maximumTotal"],
+                          "type": "object"
+                        },
+                        "expectedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "maximumNetworkFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "notes": { "items": { "type": "string" }, "type": "array" },
+                        "originalAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "recoverableReserve": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "totalLockedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                      },
+                      "required": [
+                        "originalAmount",
+                        "expectedCompensation",
+                        "completedWorkCharges",
+                        "maximumNetworkFee",
+                        "recoverableReserve",
+                        "accumulatedCompensation",
+                        "totalLockedAmount",
+                        "notes"
+                      ],
+                      "type": "object"
+                    },
                     "transaction": { "additionalProperties": true, "type": "object" },
                     "version": { "enum": [2], "type": "integer" }
                   },
-                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "required": [
+                    "version",
+                    "operation",
+                    "transaction",
+                    "intentHash",
+                    "payloadHash",
+                    "progressHash",
+                    "prepareCreditHash",
+                    "review",
+                    "completion"
+                  ],
                   "type": "object"
                 }
               }
@@ -1234,16 +1450,88 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "completion": {
+                      "properties": {
+                        "allowedFundingLockHashes": {
+                          "items": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "type": "array"
+                        },
+                        "maximumFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "requiredInputCapacity": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "requiredInputCount": { "minimum": 0, "type": "integer" },
+                        "requiredOutputCount": { "minimum": 0, "type": "integer" }
+                      },
+                      "required": [
+                        "requiredInputCount",
+                        "requiredOutputCount",
+                        "requiredInputCapacity",
+                        "maximumFee",
+                        "allowedFundingLockHashes"
+                      ],
+                      "type": "object"
+                    },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
                     },
-                    "review": { "additionalProperties": true, "type": "object" },
+                    "payloadHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "prepareCreditHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "progressHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "review": {
+                      "properties": {
+                        "accumulatedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "completedWorkCharges": {
+                          "properties": {
+                            "claim": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "maximumTotal": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "prepare": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                          },
+                          "required": ["prepare", "claim", "maximumTotal"],
+                          "type": "object"
+                        },
+                        "expectedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "maximumNetworkFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "notes": { "items": { "type": "string" }, "type": "array" },
+                        "originalAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "recoverableReserve": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "totalLockedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                      },
+                      "required": [
+                        "originalAmount",
+                        "expectedCompensation",
+                        "completedWorkCharges",
+                        "maximumNetworkFee",
+                        "recoverableReserve",
+                        "accumulatedCompensation",
+                        "totalLockedAmount",
+                        "notes"
+                      ],
+                      "type": "object"
+                    },
                     "transaction": { "additionalProperties": true, "type": "object" },
                     "version": { "enum": [2], "type": "integer" }
                   },
-                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "required": [
+                    "version",
+                    "operation",
+                    "transaction",
+                    "intentHash",
+                    "payloadHash",
+                    "progressHash",
+                    "prepareCreditHash",
+                    "review",
+                    "completion"
+                  ],
                   "type": "object"
                 }
               }
@@ -1269,16 +1557,88 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "completion": {
+                      "properties": {
+                        "allowedFundingLockHashes": {
+                          "items": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "type": "array"
+                        },
+                        "maximumFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "requiredInputCapacity": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "requiredInputCount": { "minimum": 0, "type": "integer" },
+                        "requiredOutputCount": { "minimum": 0, "type": "integer" }
+                      },
+                      "required": [
+                        "requiredInputCount",
+                        "requiredOutputCount",
+                        "requiredInputCapacity",
+                        "maximumFee",
+                        "allowedFundingLockHashes"
+                      ],
+                      "type": "object"
+                    },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
                     },
-                    "review": { "additionalProperties": true, "type": "object" },
+                    "payloadHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "prepareCreditHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "progressHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "review": {
+                      "properties": {
+                        "accumulatedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "completedWorkCharges": {
+                          "properties": {
+                            "claim": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "maximumTotal": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                            "prepare": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                          },
+                          "required": ["prepare", "claim", "maximumTotal"],
+                          "type": "object"
+                        },
+                        "expectedCompensation": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "maximumNetworkFee": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "notes": { "items": { "type": "string" }, "type": "array" },
+                        "originalAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "recoverableReserve": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                        "totalLockedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
+                      },
+                      "required": [
+                        "originalAmount",
+                        "expectedCompensation",
+                        "completedWorkCharges",
+                        "maximumNetworkFee",
+                        "recoverableReserve",
+                        "accumulatedCompensation",
+                        "totalLockedAmount",
+                        "notes"
+                      ],
+                      "type": "object"
+                    },
                     "transaction": { "additionalProperties": true, "type": "object" },
                     "version": { "enum": [2], "type": "integer" }
                   },
-                  "required": ["version", "operation", "transaction", "intentHash", "review"],
+                  "required": [
+                    "version",
+                    "operation",
+                    "transaction",
+                    "intentHash",
+                    "payloadHash",
+                    "progressHash",
+                    "prepareCreditHash",
+                    "review",
+                    "completion"
+                  ],
                   "type": "object"
                 }
               }

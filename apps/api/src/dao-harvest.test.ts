@@ -150,7 +150,26 @@ test("V2 build endpoints fail closed until a chain-aware adapter is deployed", a
       operation,
       transaction: {},
       intentHash: `0x${"b".repeat(64)}`,
-      review: {},
+      payloadHash: `0x${"c".repeat(64)}`,
+      progressHash: `0x${"d".repeat(64)}`,
+      prepareCreditHash: `0x${"0".repeat(64)}`,
+      review: {
+        originalAmount: "1000",
+        expectedCompensation: "10",
+        completedWorkCharges: { prepare: "1", claim: "1", maximumTotal: "2" },
+        maximumNetworkFee: "1",
+        recoverableReserve: "100",
+        accumulatedCompensation: "0",
+        totalLockedAmount: "1100",
+        notes: [],
+      },
+      completion: {
+        requiredInputCount: 1,
+        requiredOutputCount: 3,
+        requiredInputCapacity: "1101",
+        maximumFee: "1",
+        allowedFundingLockHashes: [`0x${"e".repeat(64)}`],
+      },
     }),
   });
   assert.equal((await available.build("rotate", {})).operation, "rotate");

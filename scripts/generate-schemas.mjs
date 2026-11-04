@@ -16,6 +16,7 @@ const schemaSpecs = [
   { file: "campaign_v1", hashConstant: "CAMPAIGN_V1_SCHEMA_SHA256" },
   { file: "recurring_v1", hashConstant: "RECURRING_V1_SCHEMA_SHA256" },
   { file: "dao_harvest_v1", hashConstant: "DAO_HARVEST_V1_SCHEMA_SHA256" },
+  { file: "dao_harvest_v2", hashConstant: "DAO_HARVEST_V2_SCHEMA_SHA256" },
 ];
 
 const compilerOutput = execFileSync("moleculec", ["--version"], {
@@ -54,6 +55,12 @@ function generateTypescript(declarations, schemaHash, hashConstant) {
           `export const ${declaration.name} = molecule.array(number.Uint8, ${declaration.item_count});`,
         );
       }
+      continue;
+    }
+
+    if (declaration.type === "fixvec") {
+      assert.equal(declaration.item, "byte", `${declaration.name} must contain bytes`);
+      lines.push(`export const ${declaration.name} = molecule.vector(number.Uint8);`);
       continue;
     }
 

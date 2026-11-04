@@ -272,6 +272,27 @@ export {
 } from "./dao-harvest-v2-prototype.ts";
 
 export {
+  DAO_HARVEST_V2_ABSENT_INDEX,
+  DAO_HARVEST_V2_COMPENSATION_ARGS_BYTES,
+  DAO_HARVEST_V2_DOMAINS,
+  DAO_HARVEST_V2_OPERATIONS,
+  DAO_HARVEST_V2_STATES,
+  DAO_HARVEST_V2_VERSION,
+  MAX_DAO_HARVEST_V2_FALLBACK_OPERATORS,
+  assertDaoHarvestV2WitnessLayout,
+  decodeDaoHarvestV2CompensationLockArgs,
+  deriveDaoHarvestV2FallbackOperatorSetHash,
+  deriveDaoHarvestV2PayloadHash,
+  deriveDaoHarvestV2PrepareCreditHash,
+  deriveDaoHarvestV2ProgressHash,
+  encodeDaoHarvestV2CompensationLockArgs,
+  normalizeDaoHarvestV2FallbackOperators,
+  type DaoHarvestV2CompensationLockArgs,
+  type DaoHarvestV2Operation,
+  type DaoHarvestV2WitnessIndices,
+} from "./dao-harvest-v2.ts";
+
+export {
   DEADLINE_CREATION_INTENT_DOMAIN,
   assertDeadlineCompletion,
   buildDeadlineCreation,

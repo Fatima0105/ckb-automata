@@ -26,7 +26,7 @@ test("error codes are unique, allocated, and have plain copy", () => {
 });
 
 test("every planned invalid transition has a script diagnostic", () => {
-  assert.equal(Object.keys(INVALID_TRANSITION_DIAGNOSTICS).length, 34);
+  assert.equal(Object.keys(INVALID_TRANSITION_DIAGNOSTICS).length, 47);
   for (const codeKey of Object.values(INVALID_TRANSITION_DIAGNOSTICS)) {
     assert.equal(ERROR_CATALOG[codeKey].domain, "script");
   }

@@ -88,6 +88,23 @@ pub mod dao_harvest_witness {
     include!("../../shared/dao_harvest_witness.rs");
 }
 
+pub mod dao_harvest_v2 {
+    include!("../../shared/dao_harvest_v2.rs");
+}
+
+#[allow(
+    clippy::clone_on_copy,
+    clippy::derivable_impls,
+    clippy::if_same_then_else,
+    clippy::manual_is_multiple_of,
+    clippy::needless_borrow,
+    clippy::useless_conversion,
+    clippy::write_literal
+)]
+pub mod generated_dao_harvest_v2 {
+    include!("../../generated/dao_harvest_v2.rs");
+}
+
 pub mod execution_witness {
     include!("../../shared/execution_witness.rs");
 }
@@ -143,6 +160,9 @@ mod dao_harvest_contract;
 
 #[cfg(test)]
 mod dao_harvest_v2_cells;
+
+#[cfg(test)]
+mod dao_harvest_v2_schema;
 
 #[cfg(test)]
 mod conformance;

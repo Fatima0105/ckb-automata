@@ -35,6 +35,19 @@ pub enum ScriptError {
     CycleLimitReached = 41,
     InvalidExecutorSet = 42,
     MissingBoundJob = 43,
+    InvalidCompensationCell = 44,
+    CompensationBindingMismatch = 45,
+    CompensationDeltaMismatch = 46,
+    InvalidPrepareCredit = 47,
+    PrepareCreditMismatch = 48,
+    UnauthorizedPreferredOperator = 49,
+    TakeoverNotReached = 50,
+    InvalidOperatorAccumulator = 51,
+    ServiceFeeMismatch = 52,
+    CompensationSeedMismatch = 53,
+    OperationLayoutMismatch = 54,
+    DuplicateJob = 55,
+    PolicyVersionMismatch = 56,
 }
 
 impl From<ScriptError> for i8 {

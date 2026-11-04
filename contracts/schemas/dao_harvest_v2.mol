@@ -1,0 +1,96 @@
+// Canonical DAO Harvest V2 wire types.
+//
+// All integers are unsigned little-endian. Capacity and service-fee values
+// are shannons. Time values are canonical absolute or relative CKB epoch-since
+// values as named. Hash fields are full 32-byte hashes, never script args.
+//
+// DaoHarvestPayloadV2 is immutable except through an owner-authorized rotation
+// that may replace only preferred_prepare_operator_lock_hash,
+// fallback_prepare_executor_set_hash, and payload_hash in the successor Job.
+// No field authorizes a reduction of principal or compensation reserve.
+//
+// CompensationLockArgsV2 is raw concatenation in this exact order:
+// job_id || owner_lock_hash || payout_lock_hash || policy_script_hash ||
+// payload_hash. The lock rejects every other length.
+//
+// DaoHarvestProgressV2 is committed by JobDataV1.trigger_params_hash using the
+// v2 progress hash domain. DEPOSITED uses zero prepare_credit_hash. WITHDRAWING
+// uses the hash of exactly one DaoHarvestPrepareCreditV2 envelope.
+//
+// A prepare credit binds a prepared vault and its Job successor through their
+// output indices in the same transaction. At claim, both consumed outpoints
+// must have the same transaction hash and the committed indices.
+//
+// Witness indices are transaction-global uint32 values. UINT32_MAX is the only
+// absent sentinel and is allowed only for fields unused by the selected
+// operation. payload_hash, progress_hash, and prepare_credit_hash bind the
+// external envelopes carried in the Job witness output_type.
+
+array Uint16 [byte; 2];
+array Uint32 [byte; 4];
+array Uint64 [byte; 8];
+array Byte32 [byte; 32];
+array CompensationLockArgsV2 [byte; 160];
+vector Bytes <byte>;
+
+table DaoHarvestPayloadV2 {
+  version: Uint16,
+  owner_lock_hash: Byte32,
+  payout_lock_hash: Byte32,
+  vault_lock_hash: Byte32,
+  compensation_lock_hash: Byte32,
+  dao_type_hash: Byte32,
+  principal_capacity: Uint64,
+  preferred_prepare_operator_lock_hash: Byte32,
+  fallback_prepare_executor_set_hash: Byte32,
+  prepare_service_fee: Uint64,
+  claim_service_fee: Uint64,
+  compensation_seed_capacity: Uint64,
+  prepare_buffer_epochs: Uint64,
+  takeover_delay_epochs: Uint64,
+  confirmation_margin_epochs: Uint64,
+  total_cycles: Uint32,
+  end_epoch_since: Uint64,
+}
+
+table DaoHarvestPrepareCreditV2 {
+  version: Uint16,
+  job_id: Byte32,
+  cycle_index: Uint32,
+  preparer_lock_hash: Byte32,
+  prepared_vault_output_index: Uint32,
+  job_output_index: Uint32,
+}
+
+table DaoHarvestProgressV2 {
+  version: Uint16,
+  state: byte,
+  cycle_index: Uint32,
+  prepare_credit_hash: Byte32,
+}
+
+table DaoHarvestWitnessV2 {
+  version: Uint16,
+  operation: byte,
+  flags: byte,
+  job_input_index: Uint32,
+  vault_input_index: Uint32,
+  compensation_input_index: Uint32,
+  identity_input_index: Uint32,
+  prepare_accumulator_input_index: Uint32,
+  claim_accumulator_input_index: Uint32,
+  job_output_index: Uint32,
+  vault_output_index: Uint32,
+  compensation_output_index: Uint32,
+  prepare_accumulator_output_index: Uint32,
+  claim_accumulator_output_index: Uint32,
+  payload_hash: Byte32,
+  progress_hash: Byte32,
+  prepare_credit_hash: Byte32,
+}
+
+table DaoHarvestEnvelopeV2 {
+  payload: Bytes,
+  progress: Bytes,
+  prepare_credit: Bytes,
+}

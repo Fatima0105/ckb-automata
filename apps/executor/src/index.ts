@@ -28,6 +28,26 @@ export {
   type DaoHarvestScheduleRecord,
 } from "./dao-harvest-scheduler.ts";
 
+export {
+  DAO_HARVEST_V1_ADAPTER_ID,
+  DAO_HARVEST_V2_ADAPTER_ID,
+  DaoHarvestV2SafetyError,
+  assertSingleCanonicalDaoHarvestV2Successor,
+  createDaoHarvestV2ExecutionPlan,
+  daoHarvestAdapterId,
+  evaluateDaoHarvestV2Schedule,
+  reconcileDaoHarvestV2Attempt,
+  validateDaoHarvestV2Reload,
+  type DaoHarvestAdapterId,
+  type DaoHarvestV2AttemptObservation,
+  type DaoHarvestV2DryRunEvidence,
+  type DaoHarvestV2ExecutionEconomics,
+  type DaoHarvestV2ExecutionPlan,
+  type DaoHarvestV2Operation,
+  type DaoHarvestV2ScheduleDecision,
+  type DaoHarvestV2ScheduleRecord,
+} from "./dao-harvest-v2-safety.ts";
+
 export { ChainBuildSnapshotSource, chainScriptIdentity } from "./build-snapshot.ts";
 export { PostgresBuildAttemptStore } from "./build-store.ts";
 export { BuildCoordinator } from "./build-worker.ts";

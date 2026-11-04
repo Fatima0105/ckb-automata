@@ -42,6 +42,7 @@ test("primary flows and representative states have no serious automated violatio
     "/automations/new/deadline",
     "/automations/new/recurring",
     "/fixtures/setup-harvest",
+    "/fixtures/setup-harvest-v2",
     "/fixtures/transaction-submission",
     "/fixtures/automation-detail",
     "/fixtures/settings",
@@ -139,6 +140,15 @@ test("harvest setup stays understandable and keyboard operable", async ({ page }
   await page.getByRole("radio", { name: "Several harvests" }).click();
   await expect(page.getByLabel("Number of harvests")).toBeVisible();
   await expect(page.getByText("original amount stays protected", { exact: false })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("protected harvest setup is accessible on desktop and mobile", async ({ page }) => {
+  await page.goto("/fixtures/setup-harvest-v2");
+  await expect(page.getByLabel("Original amount (CKB)")).toBeVisible();
+  await expect(page.getByLabel("Compensation address")).toBeVisible();
+  await expect(page.getByText("Preferred operator", { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await expectNoSeriousAccessibilityViolations(page);
 });

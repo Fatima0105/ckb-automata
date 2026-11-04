@@ -1153,6 +1153,7 @@
                       "type": "object"
                     },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
@@ -1202,6 +1203,7 @@
                   },
                   "required": [
                     "version",
+                    "jobId",
                     "operation",
                     "transaction",
                     "intentHash",
@@ -1260,6 +1262,7 @@
                       "type": "object"
                     },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
@@ -1309,6 +1312,7 @@
                   },
                   "required": [
                     "version",
+                    "jobId",
                     "operation",
                     "transaction",
                     "intentHash",
@@ -1326,6 +1330,48 @@
           }
         },
         "summary": "Build an unsigned DAO harvest V2 recover transaction",
+        "tags": ["DAO harvest V2"]
+      }
+    },
+    "/v1/dao-harvest-v2/register-setup": {
+      "post": {
+        "operationId": "DaoHarvestV2Controller_registerSetup",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "transactionHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" }
+                },
+                "required": ["transactionHash"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "lastKnownStatus": { "type": "string" },
+                    "status": { "enum": ["submitting", "confirming"], "type": "string" },
+                    "submittedAt": { "format": "date-time", "type": "string" },
+                    "transactionHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" }
+                  },
+                  "required": ["transactionHash", "submittedAt", "status", "lastKnownStatus"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Register a submitted DAO harvest V2 setup",
         "tags": ["DAO harvest V2"]
       }
     },
@@ -1367,6 +1413,7 @@
                       "type": "object"
                     },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
@@ -1416,6 +1463,7 @@
                   },
                   "required": [
                     "version",
+                    "jobId",
                     "operation",
                     "transaction",
                     "intentHash",
@@ -1474,6 +1522,7 @@
                       "type": "object"
                     },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
@@ -1523,6 +1572,7 @@
                   },
                   "required": [
                     "version",
+                    "jobId",
                     "operation",
                     "transaction",
                     "intentHash",
@@ -1581,6 +1631,7 @@
                       "type": "object"
                     },
                     "intentHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                     "operation": {
                       "enum": ["setup", "sweep", "close", "rotate", "recover"],
                       "type": "string"
@@ -1630,6 +1681,7 @@
                   },
                   "required": [
                     "version",
+                    "jobId",
                     "operation",
                     "transaction",
                     "intentHash",

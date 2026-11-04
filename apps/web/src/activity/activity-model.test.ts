@@ -3,7 +3,13 @@ import test from "node:test";
 
 import type { ApiActivity } from "@ckb-automata/api-client";
 
-import { activityOutcome, filterActivity, groupActivity, mergeActivity } from "./activity-model.ts";
+import {
+  activityLabel,
+  activityOutcome,
+  filterActivity,
+  groupActivity,
+  mergeActivity,
+} from "./activity-model.ts";
 
 const HASH_A = `0x${"11".repeat(32)}`;
 const HASH_B = `0x${"22".repeat(32)}`;
@@ -52,6 +58,23 @@ test("activity groups by job without merging operational and canonical evidence"
   assert.equal(groups.length, 2);
   assert.deepEqual(groups[0]?.items, [confirmed, submitted]);
   assert.notEqual(groups[0]?.items[0]?.source, groups[0]?.items[1]?.source);
+});
+
+test("harvest operator activity uses plain preferred and backup language", () => {
+  assert.equal(
+    activityLabel({
+      ...event("9", HASH_A, "indexed", "confirmed"),
+      eventType: "dao_harvest_v2_preferred_claim",
+    }),
+    "Preferred operator completed the harvest",
+  );
+  assert.equal(
+    activityLabel({
+      ...event("10", HASH_A, "indexed", "confirmed"),
+      eventType: "dao_harvest_v2_fallback_prepare",
+    }),
+    "Backup operator started the harvest",
+  );
 });
 
 test("outcome filters cover contention, drops, reorgs, cancellation, and recovery", () => {

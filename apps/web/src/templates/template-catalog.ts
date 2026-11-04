@@ -45,14 +45,14 @@ export const TEMPLATE_CATALOG: readonly TemplateCatalogItem[] = Object.freeze([
     risk: "Demo records are illustrative and do not prove public testnet execution.",
   }),
   Object.freeze({
-    action: Object.freeze({ href: "/automations/new/dao-harvest", label: "Set up harvest" }),
+    action: Object.freeze({ href: "/automations/new/dao-harvest-v2", label: "Set up harvest" }),
     approval:
       "Your wallet approves a limited testnet policy that preserves the original DAO amount.",
     capability: "executable",
     description: "Keep your original amount in the DAO and send earned compensation to you.",
     id: "dao-harvest",
     name: "Harvest compensation",
-    recoverability: "The owner wallet can stop future cycles, exit, or recover without CKAutomata.",
+    recoverability: "The owner wallet can update operators, close, or recover without CKAutomata.",
     risk: "Testnet pilot only. Timing and compensation estimates can change with the CKB chain.",
   }),
 ]);

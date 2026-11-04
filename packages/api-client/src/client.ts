@@ -279,6 +279,12 @@ export class AutomataApiClient {
     return this.#post(`v1/dao-harvest-v2/${operation}`, body);
   }
 
+  registerDaoHarvestV2Setup(
+    body: ApiRequestBody<"DaoHarvestV2Controller_registerSetup">,
+  ): Promise<ApiSuccess<"DaoHarvestV2Controller_registerSetup">> {
+    return this.#post("v1/dao-harvest-v2/register-setup", body);
+  }
+
   getDaoHarvestQuote(jobId: string): Promise<ApiDaoHarvestQuote> {
     return this.#request(`v1/dao-harvest/${encodeURIComponent(jobId)}/quote`);
   }

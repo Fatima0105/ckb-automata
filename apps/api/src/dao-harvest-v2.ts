@@ -89,6 +89,7 @@ export interface DaoHarvestV2QuoteReadModel {
 export type DaoHarvestV2BuildOperation = "setup" | "sweep" | "close" | "rotate" | "recover";
 export interface DaoHarvestV2UnsignedBuild {
   readonly version: 2;
+  readonly jobId: string;
   readonly operation: DaoHarvestV2BuildOperation;
   readonly transaction: unknown;
   readonly intentHash: string;
@@ -120,6 +121,7 @@ export interface DaoHarvestV2UnsignedBuild {
 
 export interface DaoHarvestV2MutationAdapter {
   build(operation: DaoHarvestV2BuildOperation, body: unknown): Promise<DaoHarvestV2UnsignedBuild>;
+  registerSetup(transactionHash: string): Promise<DaoHarvestV2PendingReadModel>;
 }
 
 export interface DaoHarvestV2PendingProvider {
@@ -348,6 +350,28 @@ export class DaoHarvestV2MutationService {
     }
     return this.#adapter.build(operation, body);
   }
+
+  registerSetup(body: unknown): Promise<DaoHarvestV2PendingReadModel> {
+    if (!this.#adapter) {
+      throw new ServiceUnavailableException(
+        "DAO harvest V2 submission registration is not deployed",
+      );
+    }
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body) ||
+      Object.keys(body).length !== 1 ||
+      !("transactionHash" in body)
+    ) {
+      throw invalidQuery("submission must contain only transactionHash");
+    }
+    const transactionHash = hash(
+      (body as Record<string, unknown>)["transactionHash"],
+      "transactionHash",
+    );
+    return this.#adapter.registerSetup(transactionHash);
+  }
 }
 
 export class DaoHarvestV2Controller {
@@ -392,6 +416,10 @@ export class DaoHarvestV2Controller {
 
   recover(body: unknown): Promise<DaoHarvestV2UnsignedBuild> {
     return this.#mutations.build("recover", body);
+  }
+
+  registerSetup(body: unknown): Promise<DaoHarvestV2PendingReadModel> {
+    return this.#mutations.registerSetup(body);
   }
 }
 
@@ -540,6 +568,7 @@ const unsignedBuildV2Schema: SchemaObject = {
   type: "object",
   required: [
     "version",
+    "jobId",
     "operation",
     "transaction",
     "intentHash",
@@ -551,6 +580,7 @@ const unsignedBuildV2Schema: SchemaObject = {
   ],
   properties: {
     version: { type: "integer", enum: [2] },
+    jobId: hashSchema,
     operation: { type: "string", enum: ["setup", "sweep", "close", "rotate", "recover"] },
     transaction: { type: "object", additionalProperties: true },
     intentHash: hashSchema,
@@ -710,3 +740,28 @@ for (const operation of ["setup", "sweep", "close", "rotate", "recover"] as cons
     descriptor,
   );
 }
+
+const registerDescriptor = Object.getOwnPropertyDescriptor(
+  DaoHarvestV2Controller.prototype,
+  "registerSetup",
+)!;
+Post("register-setup")(DaoHarvestV2Controller.prototype, "registerSetup", registerDescriptor);
+Body()(DaoHarvestV2Controller.prototype, "registerSetup", 0);
+ApiOperation({ summary: "Register a submitted DAO harvest V2 setup" })(
+  DaoHarvestV2Controller.prototype,
+  "registerSetup",
+  registerDescriptor,
+);
+ApiBody({
+  schema: {
+    type: "object",
+    required: ["transactionHash"],
+    additionalProperties: false,
+    properties: { transactionHash: hashSchema },
+  },
+})(DaoHarvestV2Controller.prototype, "registerSetup", registerDescriptor);
+ApiOkResponse({ schema: pendingV2Schema })(
+  DaoHarvestV2Controller.prototype,
+  "registerSetup",
+  registerDescriptor,
+);

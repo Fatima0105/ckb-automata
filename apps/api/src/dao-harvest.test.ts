@@ -80,6 +80,7 @@ test("DAO harvest API publishes read, quote, and unsigned mutation routes", asyn
       "/v1/dao-harvest-v2/close",
       "/v1/dao-harvest-v2/rotate",
       "/v1/dao-harvest-v2/recover",
+      "/v1/dao-harvest-v2/register-setup",
     ]) {
       assert.ok(document.paths[path], `missing OpenAPI path ${path}`);
     }
@@ -147,6 +148,7 @@ test("V2 build endpoints fail closed until a chain-aware adapter is deployed", a
   const available = new DaoHarvestV2MutationService({
     build: async (operation) => ({
       version: 2,
+      jobId: `0x${"a".repeat(64)}`,
       operation,
       transaction: {},
       intentHash: `0x${"b".repeat(64)}`,
@@ -171,8 +173,22 @@ test("V2 build endpoints fail closed until a chain-aware adapter is deployed", a
         allowedFundingLockHashes: [`0x${"e".repeat(64)}`],
       },
     }),
+    registerSetup: async (transactionHash) => ({
+      transactionHash,
+      submittedAt: "2026-11-04T00:00:00.000Z",
+      status: "submitting",
+      lastKnownStatus: "submitted",
+    }),
   });
   assert.equal((await available.build("rotate", {})).operation, "rotate");
+  assert.equal(
+    (
+      await available.registerSetup({
+        transactionHash: `0x${"f".repeat(64)}`,
+      })
+    ).status,
+    "submitting",
+  );
 });
 
 test("mutation service cannot sign, broadcast, or build before deployment registration", () => {

@@ -116,6 +116,9 @@
   grid-template-columns: 1.3fr 1fr 1fr;
   padding: var(--ui-space-5);
 }
+.harvest-detail__summary--four {
+  grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr));
+}
 .harvest-detail__summary > div {
   gap: var(--ui-space-3);
   min-width: 0;
@@ -221,6 +224,39 @@
   display: flex;
   gap: var(--ui-space-3);
 }
+.harvest-v2-values,
+.harvest-v2-explainer {
+  display: grid;
+  gap: var(--ui-space-3);
+  margin: 0;
+}
+.harvest-v2-values {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.harvest-v2-values > div,
+.harvest-v2-explainer > div {
+  background: var(--ui-color-surface-subtle);
+  display: grid;
+  gap: var(--ui-space-1);
+  padding: var(--ui-space-3);
+}
+.harvest-v2-values dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.harvest-v2-values dt,
+.harvest-v2-explainer span {
+  color: var(--ui-color-text-muted);
+  font-size: 0.8125rem;
+}
+.harvest-v2-values a {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--ui-space-1);
+}
+.harvest-v2-explainer {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 
 @keyframes harvest-pulse {
   to {
@@ -230,6 +266,10 @@
 
 @media (max-width: 48rem) {
   .harvest-detail__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .harvest-v2-explainer,
+  .harvest-v2-values {
     grid-template-columns: minmax(0, 1fr);
   }
   .harvest-dashboard__header {

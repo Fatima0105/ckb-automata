@@ -2,7 +2,14 @@ import type { ApiActivity } from "@ckb-automata/api-client";
 
 export type ActivityEvent = ApiActivity["items"][number];
 export type ActivityOutcomeFilter =
-  "" | "submitted" | "confirmed" | "conflicted" | "dropped" | "reorged" | "cancelled" | "recovery";
+  | ""
+  | "submitted"
+  | "confirmed"
+  | "conflicted"
+  | "dropped"
+  | "reorged"
+  | "cancelled"
+  | "recovery";
 
 export interface ActivityGroup {
   readonly items: readonly ActivityEvent[];
@@ -17,6 +24,17 @@ export function activityOutcome(event: ActivityEvent): string {
 }
 
 export function activityLabel(event: ActivityEvent): string {
+  const harvestLabels: readonly [string, string][] = [
+    ["preferred_prepare", "Preferred operator started the harvest"],
+    ["fallback_prepare", "Backup operator started the harvest"],
+    ["preferred_claim", "Preferred operator completed the harvest"],
+    ["fallback_claim", "Backup operator completed the harvest"],
+    ["owner_complete", "Owner completed the harvest"],
+    ["sweep", "Earned compensation withdrawn"],
+    ["rotate", "Harvest operators updated"],
+  ];
+  const harvest = harvestLabels.find(([operation]) => event.eventType.includes(operation));
+  if (harvest) return harvest[1];
   return event.eventType
     .split("_")
     .filter(Boolean)

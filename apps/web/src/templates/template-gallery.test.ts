@@ -17,7 +17,7 @@ test("template availability matches implemented product boundaries", () => {
   const executable = TEMPLATE_CATALOG.filter((template) => template.capability === "executable");
   assert.deepEqual(
     executable.map((template) => template.action.href),
-    ["/automations/new/deadline", "/automations/new/recurring", "/automations/new/dao-harvest"],
+    ["/automations/new/deadline", "/automations/new/recurring", "/automations/new/dao-harvest-v2"],
   );
   assert.ok(
     TEMPLATE_CATALOG.filter((template) => template.capability !== "executable").every(

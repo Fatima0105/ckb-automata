@@ -134,11 +134,13 @@ test("reads V2 harvest projections without changing V1 routes", async () => {
   await client.getDaoHarvestV2(`0x${"a".repeat(64)}`);
   await client.getDaoHarvestV2Quote(`0x${"a".repeat(64)}`);
   await client.buildDaoHarvestV2("sweep", { jobId: `0x${"a".repeat(64)}` });
+  await client.registerDaoHarvestV2Setup({ transactionHash: `0x${"b".repeat(64)}` });
   assert.deepEqual(urls, [
     "https://api.example.test/v1/dao-harvest-v2?limit=20",
     `https://api.example.test/v1/dao-harvest-v2/0x${"a".repeat(64)}`,
     `https://api.example.test/v1/dao-harvest-v2/0x${"a".repeat(64)}/quote`,
     "https://api.example.test/v1/dao-harvest-v2/sweep",
+    "https://api.example.test/v1/dao-harvest-v2/register-setup",
   ]);
 });
 

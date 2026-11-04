@@ -192,6 +192,23 @@ export type paths = {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/v1/dao-harvest-v2/register-setup": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Register a submitted DAO harvest V2 setup */
+        readonly post: operations["DaoHarvestV2Controller_registerSetup"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/v1/dao-harvest-v2/rotate": {
         readonly parameters: {
             readonly query?: never;
@@ -1579,6 +1596,7 @@ export interface operations {
                             readonly requiredOutputCount: number;
                         };
                         readonly intentHash: string;
+                        readonly jobId: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
                         readonly payloadHash: string;
@@ -1635,6 +1653,7 @@ export interface operations {
                             readonly requiredOutputCount: number;
                         };
                         readonly intentHash: string;
+                        readonly jobId: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
                         readonly payloadHash: string;
@@ -1659,6 +1678,38 @@ export interface operations {
                         };
                         /** @enum {integer} */
                         readonly version: 2;
+                    };
+                };
+            };
+        };
+    };
+    readonly DaoHarvestV2Controller_registerSetup: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": {
+                    readonly transactionHash: string;
+                };
+            };
+        };
+        readonly responses: {
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": {
+                        readonly lastKnownStatus: string;
+                        /** @enum {string} */
+                        readonly status: "submitting" | "confirming";
+                        /** Format: date-time */
+                        readonly submittedAt: string;
+                        readonly transactionHash: string;
                     };
                 };
             };
@@ -1691,6 +1742,7 @@ export interface operations {
                             readonly requiredOutputCount: number;
                         };
                         readonly intentHash: string;
+                        readonly jobId: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
                         readonly payloadHash: string;
@@ -1747,6 +1799,7 @@ export interface operations {
                             readonly requiredOutputCount: number;
                         };
                         readonly intentHash: string;
+                        readonly jobId: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
                         readonly payloadHash: string;
@@ -1803,6 +1856,7 @@ export interface operations {
                             readonly requiredOutputCount: number;
                         };
                         readonly intentHash: string;
+                        readonly jobId: string;
                         /** @enum {string} */
                         readonly operation: "setup" | "sweep" | "close" | "rotate" | "recover";
                         readonly payloadHash: string;

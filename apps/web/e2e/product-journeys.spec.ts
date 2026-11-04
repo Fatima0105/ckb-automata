@@ -55,6 +55,23 @@ test("keeps DAO harvest setup simple and blocks incomplete wallet approval", asy
   await expectNoHorizontalOverflow(page);
 });
 
+test("explains protected harvest charges and operator takeover in plain language", async ({
+  page,
+}) => {
+  await page.goto("/fixtures/setup-harvest-v2");
+  await expect(page.getByRole("heading", { level: 1, name: "Harvest compensation" })).toBeVisible();
+  await page.getByLabel("Automation title").fill("Protected DAO harvest");
+  await page.getByLabel("Original amount (CKB)").fill("1000");
+  await page.getByRole("radio", { name: "Several harvests" }).click();
+  await page.getByLabel("Number of harvests").fill("3");
+  await expect(page.getByText("Preferred operator", { exact: true })).toBeVisible();
+  await expect(page.getByText("Backup operator", { exact: true })).toBeVisible();
+  await expect(page.getByText("Recoverable reserve", { exact: true })).toBeVisible();
+  await expect(page.getByText(/service charges come only from earned compensation/i)).toBeVisible();
+  await expect(page.getByText(/block number|epoch/i)).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+});
+
 test("reproduces wallet outcomes and transaction progress", async ({ page }) => {
   await page.goto("/fixtures/transaction-submission");
   await page.getByRole("button", { name: "Reject", exact: true }).click();

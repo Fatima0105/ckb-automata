@@ -119,6 +119,29 @@ test("registers a submitted DAO harvest by transaction hash", async () => {
   assert.deepEqual(await request?.json(), { transactionHash });
 });
 
+test("reads V2 harvest projections without changing V1 routes", async () => {
+  let urls: string[] = [];
+  const client = createApiClient({
+    baseUrl: "https://api.example.test",
+    fetch: async (input) => {
+      urls = [...urls, String(input)];
+      return new Response(JSON.stringify({ items: [], page: { limit: 20, nextCursor: null } }), {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  await client.listDaoHarvestV2({ limit: 20 });
+  await client.getDaoHarvestV2(`0x${"a".repeat(64)}`);
+  await client.getDaoHarvestV2Quote(`0x${"a".repeat(64)}`);
+  await client.buildDaoHarvestV2("sweep", { jobId: `0x${"a".repeat(64)}` });
+  assert.deepEqual(urls, [
+    "https://api.example.test/v1/dao-harvest-v2?limit=20",
+    `https://api.example.test/v1/dao-harvest-v2/0x${"a".repeat(64)}`,
+    `https://api.example.test/v1/dao-harvest-v2/0x${"a".repeat(64)}/quote`,
+    "https://api.example.test/v1/dao-harvest-v2/sweep",
+  ]);
+});
+
 test("revokes settings sessions with bearer authentication", async () => {
   const requests: Array<{ headers: Headers; method: string; url: string }> = [];
   const client = createApiClient({

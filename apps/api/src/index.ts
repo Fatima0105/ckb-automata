@@ -192,6 +192,34 @@ export {
   type DaoHarvestUnsignedBuild,
 } from "./dao-harvest.ts";
 export {
+  DaoHarvestV2Controller,
+  DaoHarvestV2MutationService,
+  DaoHarvestV2PendingService,
+  DaoHarvestV2ReadService,
+  type DaoHarvestV2ListResponse,
+  type DaoHarvestV2BuildOperation,
+  type DaoHarvestV2MutationAdapter,
+  type DaoHarvestV2PendingProvider,
+  type DaoHarvestV2PendingReadModel,
+  type DaoHarvestV2PendingSource,
+  type DaoHarvestV2QuoteReadModel,
+  type DaoHarvestV2ReadModel,
+  type DaoHarvestV2UnsignedBuild,
+  type StoredDaoHarvestV2Submission,
+} from "./dao-harvest-v2.ts";
+export {
+  DAO_HARVEST_V2_OPERATION_NAMES,
+  extractDaoHarvestV2ProjectionEvents,
+  rebuildDaoHarvestV2Snapshot,
+  type DaoHarvestV2ProjectedOperation,
+  type DaoHarvestV2ProjectionDeployment,
+  type DaoHarvestV2ProjectionEvent,
+  type DaoHarvestV2ProjectionExtraction,
+  type DaoHarvestV2ResolvedInput,
+  type DaoHarvestV2Snapshot,
+} from "./indexer/dao-harvest-v2-projection.ts";
+export { DaoHarvestV2ProjectionStore } from "./indexer/dao-harvest-v2-store.ts";
+export {
   extractDaoHarvestProjections,
   DaoHarvestProjectionStore,
   type DaoHarvestProjection,

@@ -948,6 +948,203 @@
         "tags": ["DAO harvest"]
       }
     },
+    "/v1/dao-harvest-v2": {
+      "get": {
+        "operationId": "DaoHarvestV2Controller_list",
+        "parameters": [
+          { "in": "query", "name": "cursor", "required": false, "schema": { "type": "string" } },
+          { "in": "query", "name": "limit", "required": false, "schema": { "type": "number" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "evidence": {
+                            "properties": {
+                              "canonical": { "type": "boolean" },
+                              "completeness": { "enum": ["complete", "partial"], "type": "string" },
+                              "transactionStatus": { "type": "string" }
+                            },
+                            "required": ["completeness", "transactionStatus", "canonical"],
+                            "type": "object"
+                          },
+                          "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "protectedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                          "state": { "type": "string" },
+                          "version": { "enum": [2], "type": "integer" }
+                        },
+                        "required": ["version", "jobId", "state", "protectedAmount", "evidence"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "page": { "type": "object" },
+                    "pendingItems": { "items": { "type": "object" }, "type": "array" }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "List chain-derived DAO harvest V2 projections",
+        "tags": ["DAO harvest V2"]
+      }
+    },
+    "/v1/dao-harvest-v2/close": {
+      "post": {
+        "operationId": "DaoHarvestV2Controller_close",
+        "parameters": [],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object" } } },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": { "type": "object" } } },
+            "description": ""
+          }
+        },
+        "summary": "Build an unsigned DAO harvest V2 close transaction",
+        "tags": ["DAO harvest V2"]
+      }
+    },
+    "/v1/dao-harvest-v2/recover": {
+      "post": {
+        "operationId": "DaoHarvestV2Controller_recover",
+        "parameters": [],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object" } } },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": { "type": "object" } } },
+            "description": ""
+          }
+        },
+        "summary": "Build an unsigned DAO harvest V2 recover transaction",
+        "tags": ["DAO harvest V2"]
+      }
+    },
+    "/v1/dao-harvest-v2/rotate": {
+      "post": {
+        "operationId": "DaoHarvestV2Controller_rotate",
+        "parameters": [],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object" } } },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": { "type": "object" } } },
+            "description": ""
+          }
+        },
+        "summary": "Build an unsigned DAO harvest V2 rotate transaction",
+        "tags": ["DAO harvest V2"]
+      }
+    },
+    "/v1/dao-harvest-v2/setup": {
+      "post": {
+        "operationId": "DaoHarvestV2Controller_setup",
+        "parameters": [],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object" } } },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": { "type": "object" } } },
+            "description": ""
+          }
+        },
+        "summary": "Build an unsigned DAO harvest V2 setup transaction",
+        "tags": ["DAO harvest V2"]
+      }
+    },
+    "/v1/dao-harvest-v2/sweep": {
+      "post": {
+        "operationId": "DaoHarvestV2Controller_sweep",
+        "parameters": [],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object" } } },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": { "type": "object" } } },
+            "description": ""
+          }
+        },
+        "summary": "Build an unsigned DAO harvest V2 sweep transaction",
+        "tags": ["DAO harvest V2"]
+      }
+    },
+    "/v1/dao-harvest-v2/{jobId}": {
+      "get": {
+        "operationId": "DaoHarvestV2Controller_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "jobId",
+            "required": true,
+            "schema": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "evidence": {
+                      "properties": {
+                        "canonical": { "type": "boolean" },
+                        "completeness": { "enum": ["complete", "partial"], "type": "string" },
+                        "transactionStatus": { "type": "string" }
+                      },
+                      "required": ["completeness", "transactionStatus", "canonical"],
+                      "type": "object"
+                    },
+                    "jobId": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "protectedAmount": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
+                    "state": { "type": "string" },
+                    "version": { "enum": [2], "type": "integer" }
+                  },
+                  "required": ["version", "jobId", "state", "protectedAmount", "evidence"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": { "description": "DAO harvest V2 automation not found" }
+        },
+        "summary": "Read one chain-derived DAO harvest V2 projection",
+        "tags": ["DAO harvest V2"]
+      }
+    },
+    "/v1/dao-harvest-v2/{jobId}/quote": {
+      "get": {
+        "operationId": "DaoHarvestV2Controller_quote",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": { "type": "object" } } },
+            "description": ""
+          }
+        },
+        "summary": "Quote one canonical DAO harvest V2 snapshot",
+        "tags": ["DAO harvest V2"]
+      }
+    },
     "/v1/dao-harvest/exit": {
       "post": {
         "operationId": "DaoHarvestController_exit",

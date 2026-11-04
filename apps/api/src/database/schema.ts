@@ -310,6 +310,101 @@ export const daoHarvestJobs = pgTable(
   ],
 );
 
+export const daoHarvestV2Events = pgTable(
+  "dao_harvest_v2_events",
+  {
+    networkId: varchar("network_id", { length: 64 })
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    eventId: varchar("event_id", { length: 160 }).notNull(),
+    jobId: hash("job_id").notNull(),
+    operation: varchar("operation", { length: 32 }).notNull(),
+    transactionHash: hash("transaction_hash").notNull(),
+    transactionIndex: uint32("transaction_index").notNull(),
+    blockNumber: uint64("block_number").notNull(),
+    blockHash: hash("block_hash").notNull(),
+    canonical: boolean("canonical").notNull().default(true),
+    projection: jsonb("projection").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).defaultNow().notNull(),
+    orphanedAt: timestamp("orphaned_at", { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.networkId, table.eventId] }),
+    uniqueIndex("dao_harvest_v2_events_chain_uq").on(
+      table.networkId,
+      table.transactionHash,
+      table.transactionIndex,
+      table.operation,
+    ),
+    index("dao_harvest_v2_events_rebuild_idx").on(
+      table.networkId,
+      table.jobId,
+      table.canonical,
+      table.blockNumber,
+      table.transactionIndex,
+    ),
+    check("dao_harvest_v2_events_job_ck", sql`${table.jobId} ~ '^0x[0-9a-f]{64}$'`),
+    check(
+      "dao_harvest_v2_events_canonicality_ck",
+      sql`(${table.canonical} AND ${table.orphanedAt} IS NULL) OR (NOT ${table.canonical} AND ${table.orphanedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const daoHarvestV2Jobs = pgTable(
+  "dao_harvest_v2_jobs",
+  {
+    networkId: varchar("network_id", { length: 64 })
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    jobId: hash("job_id").notNull(),
+    ownerLockHash: hash("owner_lock_hash").notNull(),
+    payoutLockHash: hash("payout_lock_hash").notNull(),
+    payloadHash: hash("payload_hash").notNull(),
+    jobOutpoint: jsonb("job_outpoint"),
+    vaultOutpoint: jsonb("vault_outpoint"),
+    compensationOutpoint: jsonb("compensation_outpoint"),
+    lifecycleState: varchar("lifecycle_state", { length: 24 }).notNull(),
+    cycleIndex: uint32("cycle_index").notNull(),
+    totalCycles: uint32("total_cycles").notNull(),
+    principalCapacity: uint64("principal_capacity").notNull(),
+    compensationCapacity: uint64("compensation_capacity"),
+    accumulatedCompensation: uint64("accumulated_compensation"),
+    prepareCredit: jsonb("prepare_credit"),
+    operatorWindow: jsonb("operator_window").notNull(),
+    serviceSettlement: jsonb("service_settlement").notNull(),
+    canonicalTxStatus: varchar("canonical_tx_status", { length: 24 }).notNull(),
+    projectionCompleteness: varchar("projection_completeness", { length: 16 }).notNull(),
+    observedBlockNumber: uint64("observed_block_number").notNull(),
+    observedBlockHash: hash("observed_block_hash").notNull(),
+    observedTransactionHash: hash("observed_transaction_hash").notNull(),
+    canonical: boolean("canonical").notNull().default(true),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.networkId, table.jobId] }),
+    index("dao_harvest_v2_jobs_owner_idx").on(
+      table.networkId,
+      table.ownerLockHash,
+      table.observedBlockNumber,
+    ),
+    index("dao_harvest_v2_jobs_schedule_idx").on(
+      table.networkId,
+      table.lifecycleState,
+      table.observedBlockNumber,
+    ),
+    check("dao_harvest_v2_jobs_job_ck", sql`${table.jobId} ~ '^0x[0-9a-f]{64}$'`),
+    check(
+      "dao_harvest_v2_jobs_cycle_ck",
+      sql`${table.cycleIndex} >= 0 AND ${table.totalCycles} > 0 AND ${table.cycleIndex} <= ${table.totalCycles}`,
+    ),
+    check(
+      "dao_harvest_v2_jobs_completeness_ck",
+      sql`${table.projectionCompleteness} IN ('complete', 'partial')`,
+    ),
+  ],
+);
+
 export const daoHarvestTransitionAttempts = pgTable(
   "dao_harvest_transition_attempts",
   {
@@ -731,6 +826,8 @@ export const schema = {
   authSessions,
   canonicalBlocks,
   daoHarvestJobs,
+  daoHarvestV2Events,
+  daoHarvestV2Jobs,
   daoHarvestTransitionAttempts,
   deadLetterActions,
   deadLetters,

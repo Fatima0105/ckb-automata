@@ -27,6 +27,7 @@ import {
   DaoHarvestReadService,
   DaoHarvestTransactionAdapter,
 } from "./dao-harvest.ts";
+import { DaoHarvestV2MutationService, DaoHarvestV2PendingService } from "./dao-harvest-v2.ts";
 import {
   DaoHarvestProjectionStore,
   extractDaoHarvestProjections,
@@ -70,14 +71,84 @@ test("DAO harvest API publishes read, quote, and unsigned mutation routes", asyn
     ]) {
       assert.ok(document.paths[path], `missing OpenAPI path ${path}`);
     }
+    for (const path of [
+      "/v1/dao-harvest-v2",
+      "/v1/dao-harvest-v2/{jobId}",
+      "/v1/dao-harvest-v2/{jobId}/quote",
+      "/v1/dao-harvest-v2/setup",
+      "/v1/dao-harvest-v2/sweep",
+      "/v1/dao-harvest-v2/close",
+      "/v1/dao-harvest-v2/rotate",
+      "/v1/dao-harvest-v2/recover",
+    ]) {
+      assert.ok(document.paths[path], `missing OpenAPI path ${path}`);
+    }
     const schema = document.paths["/v1/dao-harvest/{jobId}"]?.get?.responses?.["200"];
     assert.match(JSON.stringify(schema), /principal/);
     assert.match(JSON.stringify(schema), /prepareStartSince/);
     const listSchema = document.paths["/v1/dao-harvest"]?.get?.responses?.["200"];
     assert.match(JSON.stringify(listSchema), /pendingItems/);
+    const fastify = app.getHttpAdapter().getInstance() as {
+      inject(input: {
+        method: string;
+        url: string;
+      }): Promise<{ statusCode: number; json(): unknown }>;
+    };
+    const invalidV2Query = await fastify.inject({
+      method: "GET",
+      url: "/v1/dao-harvest-v2?limit=0",
+    });
+    assert.equal(invalidV2Query.statusCode, 400);
+    assert.deepEqual(invalidV2Query.json(), {
+      status: "invalid_request",
+      code: "INVALID_DAO_HARVEST_V2_QUERY",
+      message: "limit must be a positive integer",
+    });
   } finally {
     await app.close();
   }
+});
+
+test("V2 pending reconciliation survives status outages without claiming confirmation", async () => {
+  let fail = true;
+  const service = new DaoHarvestV2PendingService({
+    list: async () => [
+      {
+        transactionHash: `0x${"a".repeat(64)}`,
+        submittedAt: new Date("2026-01-01T00:00:00.000Z"),
+        lastKnownStatus: "submitted",
+      },
+    ],
+    status: async () => {
+      if (fail) throw new Error("temporary status outage");
+      return "confirmed";
+    },
+  });
+  assert.deepEqual(await service.list(), [
+    {
+      transactionHash: `0x${"a".repeat(64)}`,
+      submittedAt: "2026-01-01T00:00:00.000Z",
+      status: "submitting",
+      lastKnownStatus: "submitted",
+    },
+  ]);
+  fail = false;
+  assert.deepEqual(await service.list(), []);
+});
+
+test("V2 build endpoints fail closed until a chain-aware adapter is deployed", async () => {
+  const unavailable = new DaoHarvestV2MutationService();
+  assert.throws(() => unavailable.build("setup", {}), /not deployed/);
+  const available = new DaoHarvestV2MutationService({
+    build: async (operation) => ({
+      version: 2,
+      operation,
+      transaction: {},
+      intentHash: `0x${"b".repeat(64)}`,
+      review: {},
+    }),
+  });
+  assert.equal((await available.build("rotate", {})).operation, "rotate");
 });
 
 test("mutation service cannot sign, broadcast, or build before deployment registration", () => {

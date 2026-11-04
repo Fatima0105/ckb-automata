@@ -15,6 +15,11 @@ import {
   DaoHarvestTransactionAdapter,
 } from "./dao-harvest.ts";
 import {
+  DaoHarvestV2Controller,
+  DaoHarvestV2MutationService,
+  DaoHarvestV2ReadService,
+} from "./dao-harvest-v2.ts";
+import {
   ActivityController,
   JobEventStreamController,
   JobEventStreamService,
@@ -75,6 +80,7 @@ Module({
     PendingCreationController,
     TransactionProgressController,
     DaoHarvestController,
+    DaoHarvestV2Controller,
   ],
 })(AppModule);
 
@@ -159,6 +165,16 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
         inject: [DatabaseClient],
         useFactory: (databaseClient: DatabaseClient) =>
           new DaoHarvestProjectionStore(databaseClient.database),
+      },
+      {
+        provide: DaoHarvestV2ReadService,
+        inject: [DatabaseClient],
+        useFactory: (databaseClient: DatabaseClient) =>
+          new DaoHarvestV2ReadService(databaseClient.database, environment.CKB_NETWORK),
+      },
+      {
+        provide: DaoHarvestV2MutationService,
+        useFactory: () => new DaoHarvestV2MutationService(),
       },
       {
         provide: CanonicalBlockProjector,

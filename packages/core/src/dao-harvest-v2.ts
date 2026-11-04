@@ -255,16 +255,12 @@ const LAYOUTS: Readonly<
       "vaultInputIndex",
       "compensationInputIndex",
       "identityInputIndex",
+      "prepareAccumulatorInputIndex",
       "vaultOutputIndex",
       "compensationOutputIndex",
-    ],
-    optional: [
-      "jobOutputIndex",
-      "prepareAccumulatorInputIndex",
       "prepareAccumulatorOutputIndex",
-      "claimAccumulatorInputIndex",
-      "claimAccumulatorOutputIndex",
     ],
+    optional: ["jobOutputIndex", "claimAccumulatorInputIndex", "claimAccumulatorOutputIndex"],
   },
   [DAO_HARVEST_V2_OPERATIONS.FALLBACK_CLAIM]: {
     required: [
@@ -272,16 +268,14 @@ const LAYOUTS: Readonly<
       "vaultInputIndex",
       "compensationInputIndex",
       "identityInputIndex",
+      "prepareAccumulatorInputIndex",
+      "claimAccumulatorInputIndex",
       "vaultOutputIndex",
       "compensationOutputIndex",
-    ],
-    optional: [
-      "jobOutputIndex",
-      "prepareAccumulatorInputIndex",
       "prepareAccumulatorOutputIndex",
-      "claimAccumulatorInputIndex",
       "claimAccumulatorOutputIndex",
     ],
+    optional: ["jobOutputIndex"],
   },
   [DAO_HARVEST_V2_OPERATIONS.OWNER_COMPLETE]: {
     required: [
@@ -289,10 +283,12 @@ const LAYOUTS: Readonly<
       "vaultInputIndex",
       "compensationInputIndex",
       "identityInputIndex",
+      "prepareAccumulatorInputIndex",
       "vaultOutputIndex",
       "compensationOutputIndex",
+      "prepareAccumulatorOutputIndex",
     ],
-    optional: ["jobOutputIndex", "prepareAccumulatorInputIndex", "prepareAccumulatorOutputIndex"],
+    optional: ["jobOutputIndex"],
   },
   [DAO_HARVEST_V2_OPERATIONS.SWEEP]: {
     required: [

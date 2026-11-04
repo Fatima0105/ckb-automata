@@ -226,15 +226,41 @@ function validIndices(operation: DaoHarvestV2Operation): DaoHarvestV2WitnessIndi
       ]);
       break;
     case DAO_HARVEST_V2_OPERATIONS.PREFERRED_CLAIM:
+      present([
+        "jobInputIndex",
+        "vaultInputIndex",
+        "compensationInputIndex",
+        "identityInputIndex",
+        "prepareAccumulatorInputIndex",
+        "vaultOutputIndex",
+        "compensationOutputIndex",
+        "prepareAccumulatorOutputIndex",
+      ]);
+      break;
     case DAO_HARVEST_V2_OPERATIONS.FALLBACK_CLAIM:
+      present([
+        "jobInputIndex",
+        "vaultInputIndex",
+        "compensationInputIndex",
+        "identityInputIndex",
+        "prepareAccumulatorInputIndex",
+        "claimAccumulatorInputIndex",
+        "vaultOutputIndex",
+        "compensationOutputIndex",
+        "prepareAccumulatorOutputIndex",
+        "claimAccumulatorOutputIndex",
+      ]);
+      break;
     case DAO_HARVEST_V2_OPERATIONS.OWNER_COMPLETE:
       present([
         "jobInputIndex",
         "vaultInputIndex",
         "compensationInputIndex",
         "identityInputIndex",
+        "prepareAccumulatorInputIndex",
         "vaultOutputIndex",
         "compensationOutputIndex",
+        "prepareAccumulatorOutputIndex",
       ]);
       break;
     case DAO_HARVEST_V2_OPERATIONS.SWEEP:
@@ -301,9 +327,9 @@ test("operator accumulator witness indices are exact pairs", () => {
     () =>
       assertDaoHarvestV2WitnessLayout(DAO_HARVEST_V2_OPERATIONS.PREFERRED_CLAIM, 0, {
         ...claim,
-        prepareAccumulatorInputIndex: 6,
+        prepareAccumulatorOutputIndex: DAO_HARVEST_V2_ABSENT_INDEX,
       }),
-    /present together/,
+    /is required/,
   );
   assert.doesNotThrow(() =>
     assertDaoHarvestV2WitnessLayout(DAO_HARVEST_V2_OPERATIONS.PREFERRED_CLAIM, 0, {

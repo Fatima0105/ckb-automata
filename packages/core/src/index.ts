@@ -1,5 +1,7 @@
 export const WORKSPACE_NAME = "ckb-automata" as const;
 
+export * from "./dao-harvest-v2-builders.ts";
+
 export {
   validateSdkConformanceFixture,
   type SdkConformanceCaseResult,

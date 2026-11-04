@@ -10,6 +10,7 @@ export const DAO_HARVEST_V2_DOMAINS = Object.freeze({
   progress: "ckb-automata/dao-harvest-progress/v2",
   prepareCredit: "ckb-automata/dao-harvest-prepare-credit/v2",
   fallbackSet: "ckb-automata/dao-harvest-fallback-set/v2",
+  intent: "ckb-automata/dao-harvest-intent/v2",
 } as const);
 
 export const DAO_HARVEST_V2_OPERATIONS = Object.freeze({
@@ -71,6 +72,10 @@ export function deriveDaoHarvestV2ProgressHash(progress: Uint8Array): Uint8Array
 
 export function deriveDaoHarvestV2PrepareCreditHash(credit: Uint8Array): Uint8Array {
   return hashDomain(DAO_HARVEST_V2_DOMAINS.prepareCredit, [credit]);
+}
+
+export function deriveDaoHarvestV2IntentHash(intent: Uint8Array): Uint8Array {
+  return hashDomain(DAO_HARVEST_V2_DOMAINS.intent, [intent]);
 }
 
 function compareBytes(left: Uint8Array, right: Uint8Array): number {

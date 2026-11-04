@@ -74,14 +74,25 @@ test("witness modes and every script error are documented from Rust sources", as
 
   const errors = await readFile(new URL("contracts/shared/error_codes.rs", root), "utf8");
   const variants = [...errors.matchAll(/^\s+([A-Za-z]+) = (\d+),$/gm)];
-  assert.equal(variants.length, 34);
-  for (const [, variant, code] of variants) {
+  const v1Variants = variants.filter(([, , code]) => Number(code) <= 43);
+  assert.equal(v1Variants.length, 34);
+  for (const [, variant, code] of v1Variants) {
     assert.match(
       spec,
       new RegExp(`\\|\\s*\\\`${code}\\\`\\s*\\|\\s*\\\`${variant}\\\``),
       `${variant} is undocumented`,
     );
   }
+  const v2Variants = variants.filter(([, , code]) => Number(code) >= 44);
+  assert.deepEqual(
+    v2Variants.map(([, , code]) => Number(code)),
+    Array.from({ length: 13 }, (_, index) => index + 44),
+  );
+  const v2Spec = await readFile(
+    new URL("docs/protocol/dao-harvest-v2-wire-format.md", root),
+    "utf8",
+  );
+  assert.match(v2Spec, /V2 adds script codes 44 through 56/);
 });
 
 test("deployment schema and reproduction vectors point to checked artifacts", async () => {

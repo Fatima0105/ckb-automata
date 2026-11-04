@@ -301,7 +301,7 @@ const LAYOUTS: Readonly<
     optional: [],
   },
   [DAO_HARVEST_V2_OPERATIONS.CLOSE]: {
-    required: ["jobInputIndex", "compensationInputIndex", "identityInputIndex"],
+    required: ["compensationInputIndex", "identityInputIndex"],
     optional: [],
   },
   [DAO_HARVEST_V2_OPERATIONS.ROTATE]: {

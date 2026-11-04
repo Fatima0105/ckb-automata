@@ -1,5 +1,7 @@
 #![no_main]
 
+extern crate alloc;
+
 use libfuzzer_sys::fuzz_target;
 
 mod execution_witness {
@@ -22,6 +24,16 @@ mod dao_harvest {
 
 mod dao_harvest_witness {
     include!("../../contracts/shared/dao_harvest_witness.rs");
+}
+
+#[allow(dead_code)]
+mod dao_harvest_v2 {
+    include!("../../contracts/shared/dao_harvest_v2.rs");
+}
+
+#[allow(dead_code)]
+mod dao_harvest_v2_validation {
+    include!("../../contracts/shared/dao_harvest_v2_validation.rs");
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -68,4 +80,16 @@ fuzz_target!(|data: &[u8]| {
         read_u64(24),
     );
     let _ = dao_harvest::decode_relative_epoch_duration(read_u64(32));
+    let _ = dao_harvest_v2_validation::allocate_compensation(
+        read_u64(0),
+        read_u64(8),
+        read_u64(16),
+        read_u64(24),
+        data[44] & 1 != 0,
+    );
+    let _ = dao_harvest_v2_validation::epoch_at_or_after_delay(
+        read_u64(0),
+        read_u64(8),
+        read_u64(16),
+    );
 });

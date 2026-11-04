@@ -5,43 +5,43 @@
     {
       "id": "job-lock.execute.one-shot.valid",
       "outcome": "valid",
-      "measuredCycles": 1752146,
-      "budgetCycles": 2200000
+      "measuredCycles": 1761407,
+      "budgetCycles": 2300000
     },
     {
       "id": "job-lock.execute.one-shot.invalid-capacity",
       "outcome": "rejected",
-      "measuredCycles": 1746101,
+      "measuredCycles": 1751624,
       "budgetCycles": 2200000
     },
     {
       "id": "job-lock.cancel.valid",
       "outcome": "valid",
-      "measuredCycles": 1741387,
-      "budgetCycles": 2200000
+      "measuredCycles": 1772816,
+      "budgetCycles": 2300000
     },
     {
       "id": "job-lock.recover.valid",
       "outcome": "valid",
-      "measuredCycles": 1721843,
+      "measuredCycles": 1737107,
       "budgetCycles": 2200000
     },
     {
       "id": "job-lock.cancel.invalid-capacity",
       "outcome": "rejected",
-      "measuredCycles": 46112,
+      "measuredCycles": 46962,
       "budgetCycles": 100000
     },
     {
       "id": "job-lock.top-up.valid",
       "outcome": "valid",
-      "measuredCycles": 1768579,
+      "measuredCycles": 1781353,
       "budgetCycles": 2300000
     },
     {
       "id": "job-lock.top-up.invalid-budget",
       "outcome": "rejected",
-      "measuredCycles": 1783995,
+      "measuredCycles": 1767270,
       "budgetCycles": 2300000
     },
     {
@@ -59,43 +59,43 @@
     {
       "id": "deadline.finalize-success.valid",
       "outcome": "valid",
-      "measuredCycles": 1933931,
+      "measuredCycles": 1947726,
       "budgetCycles": 2500000
     },
     {
       "id": "deadline.finalize-refund.valid",
       "outcome": "valid",
-      "measuredCycles": 1992051,
+      "measuredCycles": 1971124,
       "budgetCycles": 2500000
     },
     {
       "id": "deadline.finalize.invalid-mixed-output",
       "outcome": "rejected",
-      "measuredCycles": 1983985,
-      "budgetCycles": 2500000
+      "measuredCycles": 2010045,
+      "budgetCycles": 2600000
     },
     {
       "id": "recurring.payout-successor.valid",
       "outcome": "valid",
-      "measuredCycles": 1947754,
+      "measuredCycles": 1979466,
       "budgetCycles": 2500000
     },
     {
       "id": "recurring.payout-successor.invalid-duplicate",
       "outcome": "rejected",
-      "measuredCycles": 1924281,
+      "measuredCycles": 1932047,
       "budgetCycles": 2500000
     },
     {
       "id": "recurring.final-run.valid",
       "outcome": "valid",
-      "measuredCycles": 1910824,
+      "measuredCycles": 1904272,
       "budgetCycles": 2400000
     },
     {
       "id": "recurring.final-run.invalid-residual",
       "outcome": "rejected",
-      "measuredCycles": 1748152,
+      "measuredCycles": 1749763,
       "budgetCycles": 2200000
     },
     {
@@ -121,6 +121,54 @@
       "outcome": "rejected",
       "measuredCycles": 375480,
       "budgetCycles": 500000
+    },
+    {
+      "id": "dao-harvest-v2.setup.valid",
+      "outcome": "valid",
+      "measuredCycles": 303991,
+      "budgetCycles": 400000
+    },
+    {
+      "id": "dao-harvest-v2.prepare-preferred.valid",
+      "outcome": "valid",
+      "measuredCycles": 707335,
+      "budgetCycles": 900000
+    },
+    {
+      "id": "dao-harvest-v2.claim-preferred.valid",
+      "outcome": "valid",
+      "measuredCycles": 1000499,
+      "budgetCycles": 1300000
+    },
+    {
+      "id": "dao-harvest-v2.claim-fallback.valid",
+      "outcome": "valid",
+      "measuredCycles": 1043930,
+      "budgetCycles": 1400000
+    },
+    {
+      "id": "dao-harvest-v2.sweep.valid",
+      "outcome": "valid",
+      "measuredCycles": 594469,
+      "budgetCycles": 800000
+    },
+    {
+      "id": "dao-harvest-v2.recover.valid",
+      "outcome": "valid",
+      "measuredCycles": 697018,
+      "budgetCycles": 900000
+    },
+    {
+      "id": "dao-harvest-v2.rotate.valid",
+      "outcome": "valid",
+      "measuredCycles": 719549,
+      "budgetCycles": 900000
+    },
+    {
+      "id": "dao-harvest-v2.close.valid",
+      "outcome": "valid",
+      "measuredCycles": 119713,
+      "budgetCycles": 200000
     }
   ],
   "capacities": [

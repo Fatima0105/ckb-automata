@@ -1,9 +1,11 @@
+use alloc::vec::Vec;
 use ckb_hash::new_blake2b;
 
 pub const DAO_HARVEST_V2_VERSION: u16 = 2;
 pub const MAX_FALLBACK_PREPARE_OPERATORS: usize = 8;
 pub const ABSENT_INDEX: u32 = u32::MAX;
 pub const COMPENSATION_LOCK_ARGS_LENGTH: usize = 160;
+pub const HARVEST_VAULT_LOCK_ARGS_LENGTH: usize = 160;
 
 pub const SETUP_OPERATION: u8 = 0;
 pub const PREFERRED_PREPARE_OPERATION: u8 = 1;
@@ -23,6 +25,7 @@ const PAYLOAD_DOMAIN: &[u8] = b"ckb-automata/dao-harvest-payload/v2";
 const PROGRESS_DOMAIN: &[u8] = b"ckb-automata/dao-harvest-progress/v2";
 const PREPARE_CREDIT_DOMAIN: &[u8] = b"ckb-automata/dao-harvest-prepare-credit/v2";
 const FALLBACK_SET_DOMAIN: &[u8] = b"ckb-automata/dao-harvest-fallback-set/v2";
+const VAULT_TERMS_DOMAIN: &[u8] = b"ckb-automata/dao-harvest-vault-terms/v2";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CompensationLockArgsV2 {
@@ -31,6 +34,15 @@ pub struct CompensationLockArgsV2 {
     pub payout_lock_hash: [u8; 32],
     pub policy_script_hash: [u8; 32],
     pub payload_hash: [u8; 32],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HarvestVaultLockArgsV2 {
+    pub job_id: [u8; 32],
+    pub owner_lock_hash: [u8; 32],
+    pub job_lock_hash: [u8; 32],
+    pub policy_script_hash: [u8; 32],
+    pub immutable_terms_hash: [u8; 32],
 }
 
 fn domain_hash(domain: &[u8], parts: &[&[u8]]) -> Option<[u8; 32]> {
@@ -56,6 +68,10 @@ pub fn payload_hash(policy_script_hash: &[u8; 32], payload: &[u8]) -> Option<[u8
 
 pub fn progress_hash(progress: &[u8]) -> Option<[u8; 32]> {
     domain_hash(PROGRESS_DOMAIN, &[progress])
+}
+
+pub fn vault_terms_hash(parts: &[&[u8]]) -> Option<[u8; 32]> {
+    domain_hash(VAULT_TERMS_DOMAIN, parts)
 }
 
 pub fn prepare_credit_hash(credit: &[u8]) -> Option<[u8; 32]> {
@@ -134,6 +150,37 @@ pub fn decode_compensation_lock_args(bytes: &[u8]) -> Option<CompensationLockArg
         payout_lock_hash: bytes[64..96].try_into().ok()?,
         policy_script_hash: bytes[96..128].try_into().ok()?,
         payload_hash: bytes[128..160].try_into().ok()?,
+    })
+}
+
+pub fn encode_harvest_vault_lock_args(input: &HarvestVaultLockArgsV2) -> [u8; 160] {
+    let mut encoded = [0_u8; HARVEST_VAULT_LOCK_ARGS_LENGTH];
+    for (index, value) in [
+        input.job_id,
+        input.owner_lock_hash,
+        input.job_lock_hash,
+        input.policy_script_hash,
+        input.immutable_terms_hash,
+    ]
+    .iter()
+    .enumerate()
+    {
+        let start = index * 32;
+        encoded[start..start + 32].copy_from_slice(value);
+    }
+    encoded
+}
+
+pub fn decode_harvest_vault_lock_args(bytes: &[u8]) -> Option<HarvestVaultLockArgsV2> {
+    if bytes.len() != HARVEST_VAULT_LOCK_ARGS_LENGTH {
+        return None;
+    }
+    Some(HarvestVaultLockArgsV2 {
+        job_id: bytes[0..32].try_into().ok()?,
+        owner_lock_hash: bytes[32..64].try_into().ok()?,
+        job_lock_hash: bytes[64..96].try_into().ok()?,
+        policy_script_hash: bytes[96..128].try_into().ok()?,
+        immutable_terms_hash: bytes[128..160].try_into().ok()?,
     })
 }
 

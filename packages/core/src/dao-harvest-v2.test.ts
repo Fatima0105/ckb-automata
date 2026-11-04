@@ -273,7 +273,7 @@ function validIndices(operation: DaoHarvestV2Operation): DaoHarvestV2WitnessIndi
       ]);
       break;
     case DAO_HARVEST_V2_OPERATIONS.CLOSE:
-      present(["jobInputIndex", "compensationInputIndex", "identityInputIndex"]);
+      present(["compensationInputIndex", "identityInputIndex"]);
       break;
     case DAO_HARVEST_V2_OPERATIONS.ROTATE:
       present([

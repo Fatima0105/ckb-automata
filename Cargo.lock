@@ -45,6 +45,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "automata-compensation-lock-v2"
+version = "0.0.0"
+dependencies = [
+ "ckb-hash",
+ "ckb-std",
+ "molecule",
+]
+
+[[package]]
 name = "automata-contract-tests"
 version = "0.0.0"
 dependencies = [
@@ -59,6 +68,15 @@ dependencies = [
 
 [[package]]
 name = "automata-dao-harvest-policy"
+version = "0.0.0"
+dependencies = [
+ "ckb-hash",
+ "ckb-std",
+ "molecule",
+]
+
+[[package]]
+name = "automata-dao-harvest-policy-v2"
 version = "0.0.0"
 dependencies = [
  "ckb-hash",
@@ -94,9 +112,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "automata-harvest-vault-lock-v2"
+version = "0.0.0"
+dependencies = [
+ "ckb-hash",
+ "ckb-std",
+ "molecule",
+]
+
+[[package]]
 name = "automata-job-lock"
 version = "0.0.0"
 dependencies = [
+ "ckb-std",
+ "molecule",
+]
+
+[[package]]
+name = "automata-job-lock-v2"
+version = "0.0.0"
+dependencies = [
+ "ckb-hash",
  "ckb-std",
  "molecule",
 ]

@@ -1,0 +1,18 @@
+[package]
+name = "automata-job-lock-v2"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "job-lock-v2"
+path = "src/main.rs"
+bench = false
+test = false
+
+[dependencies]
+ckb-hash.workspace = true
+ckb-std.workspace = true
+molecule.workspace = true

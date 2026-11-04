@@ -1,3 +1,5 @@
+extern crate alloc;
+
 pub fn native_harness_ready() -> bool {
     true
 }
@@ -92,6 +94,10 @@ pub mod dao_harvest_v2 {
     include!("../../shared/dao_harvest_v2.rs");
 }
 
+pub mod dao_harvest_v2_validation {
+    include!("../../shared/dao_harvest_v2_validation.rs");
+}
+
 #[allow(
     clippy::clone_on_copy,
     clippy::derivable_impls,
@@ -163,6 +169,13 @@ mod dao_harvest_v2_cells;
 
 #[cfg(test)]
 mod dao_harvest_v2_schema;
+
+#[cfg(test)]
+mod dao_harvest_v2_contract;
+
+#[cfg(test)]
+#[path = "dao_harvest_v2_validation.rs"]
+mod dao_harvest_v2_validation_tests;
 
 #[cfg(test)]
 mod conformance;

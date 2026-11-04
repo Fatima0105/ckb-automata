@@ -13,7 +13,8 @@ use molecule::prelude::{Builder, Entity};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 use crate::{
-    campaign_creation, campaign_success, dao_harvest_contract, execution_mode,
+    campaign_creation, campaign_success, dao_harvest_contract, dao_harvest_v2_contract,
+    execution_mode,
     fixtures::{job_data, seeded_script},
     generated_campaign::CampaignDataV1,
     generated_dao_harvest::DaoHarvestPayloadV1,
@@ -145,7 +146,8 @@ fn cycle_measurements() -> Vec<CycleMeasurement> {
         .chain(campaign_success::benchmark_cases())
         .chain(recurring_payout::benchmark_cases())
         .chain(recurring_final::benchmark_cases())
-        .chain(dao_harvest_contract::benchmark_cases());
+        .chain(dao_harvest_contract::benchmark_cases())
+        .chain(dao_harvest_v2_contract::benchmark_cases());
 
     cases
         .map(|case| {

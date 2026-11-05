@@ -10,6 +10,7 @@ interface SubmissionRow {
   readonly state: "awaiting_signature" | "submitted";
   readonly tx_hash: string | null;
   readonly unsigned_transaction: postgres.JSONValue;
+  readonly simulation: postgres.JSONValue;
 }
 
 function jsonRecord(value: postgres.JSONValue): Readonly<Record<string, unknown>> {
@@ -17,6 +18,15 @@ function jsonRecord(value: postgres.JSONValue): Readonly<Record<string, unknown>
     throw new Error("submission transaction is not a JSON object");
   }
   return Object.freeze(value as Record<string, unknown>);
+}
+
+function feeInputIndex(value: postgres.JSONValue): number {
+  const simulation = jsonRecord(value);
+  const index = simulation["feeInputIndex"];
+  if (!Number.isSafeInteger(index) || (index as number) < 0) {
+    throw new Error("approved simulation is missing its verified fee input index");
+  }
+  return index as number;
 }
 
 export class PostgresSubmissionStore implements SubmissionStore {
@@ -40,7 +50,7 @@ export class PostgresSubmissionStore implements SubmissionStore {
 
   async load(attemptId: string, intentHash: Hash32): Promise<SubmissionAttempt | undefined> {
     const rows = await this.#sql<SubmissionRow[]>`
-      SELECT id, intent_hash, state, tx_hash, unsigned_transaction
+      SELECT id, intent_hash, state, tx_hash, unsigned_transaction, simulation
       FROM transaction_attempts
       WHERE id = ${attemptId}
         AND intent_hash = ${intentHash}
@@ -66,6 +76,7 @@ export class PostgresSubmissionStore implements SubmissionStore {
       intentHash: parseHash32(row.intent_hash),
       state: "awaiting_signature",
       transaction: jsonRecord(row.unsigned_transaction),
+      feeInputIndex: feeInputIndex(row.simulation),
     });
   }
 

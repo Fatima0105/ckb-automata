@@ -30,6 +30,7 @@ export interface SimulationRecord {
   readonly reward: string;
   readonly margin: string;
   readonly intentHash: Hash32;
+  readonly feeInputIndex: number;
 }
 
 export interface SimulationStore {
@@ -198,15 +199,16 @@ function accounting(
   built: UnsignedDeadlineTransaction,
   snapshot: Readonly<Record<string, unknown>>,
   rewardLock: ScriptIdentity,
-): { readonly fee: Shannons; readonly reward: Shannons } {
+): { readonly fee: Shannons; readonly reward: Shannons; readonly feeInputIndex: number } {
+  const feeCells = array(snapshot["feeCells"], "snapshot.feeCells").map((item, index) =>
+    record(item, `snapshot.feeCells[${index}]`),
+  );
   const cells = [
     record(snapshot["job"], "snapshot.job"),
     ...array(snapshot["applicationCells"], "snapshot.applicationCells").map((item, index) =>
       record(item, `snapshot.applicationCells[${index}]`),
     ),
-    ...array(snapshot["feeCells"], "snapshot.feeCells").map((item, index) =>
-      record(item, `snapshot.feeCells[${index}]`),
-    ),
+    ...feeCells,
   ];
   const capacities = new Map<string, Shannons>();
   for (const [index, cell] of cells.entries()) {
@@ -254,7 +256,31 @@ function accounting(
       "transaction does not preserve the committed executor reward",
     );
   }
-  return Object.freeze({ fee: parseShannons(inputTotal - outputTotal), reward });
+  const feeOutPoints = new Set(
+    feeCells.flatMap((cell, index) => {
+      const output = record(cell["output"], `snapshot.feeCells[${index}].output`);
+      return JSON.stringify(script(output["lock"], `snapshot.feeCells[${index}].lock`)) ===
+        JSON.stringify(rewardLock)
+        ? [outPointKey(cell["outPoint"], `snapshot.feeCells[${index}].outPoint`)]
+        : [];
+    }),
+  );
+  const feeInputIndices = built.inputs.flatMap((input, index) =>
+    feeOutPoints.has(`${input.previousOutput.txHash}/${BigInt(input.previousOutput.index)}`)
+      ? [index]
+      : [],
+  );
+  if (feeInputIndices.length !== 1) {
+    throw new SimulationGateError(
+      "EXECUTOR_BUILD_RECORD_INVALID",
+      "transaction must consume exactly one verified executor fee input",
+    );
+  }
+  return Object.freeze({
+    fee: parseShannons(inputTotal - outputTotal),
+    reward,
+    feeInputIndex: feeInputIndices[0]!,
+  });
 }
 
 function gateCode(error: unknown): string {
@@ -314,7 +340,7 @@ export class SimulationGateService {
           "stored transaction no longer matches its intent hash",
         );
       }
-      const { fee, reward } = accounting(built, attempt.snapshot, this.#rewardLock);
+      const { fee, reward, feeInputIndex } = accounting(built, attempt.snapshot, this.#rewardLock);
       if (fee !== this.#transactionFee) {
         throw new SimulationGateError(
           "EXECUTOR_FEE_MISMATCH",
@@ -327,7 +353,7 @@ export class SimulationGateService {
           "transaction reward does not meet the configured margin",
         );
       }
-      const signed = signOperatorFeeInput(built, this.#privateKey);
+      const signed = signOperatorFeeInput(built, this.#privateKey, feeInputIndex);
       const cycles = await this.#chain.dryRun(signed);
       if (cycles > this.#maxCycles) {
         throw new SimulationGateError(
@@ -341,6 +367,7 @@ export class SimulationGateService {
         reward: reward.toString(),
         margin: (reward - fee).toString(),
         intentHash,
+        feeInputIndex,
       });
       if (!(await this.#store.approve(attempt, simulationRecord))) {
         return Object.freeze({ status: "stale" });

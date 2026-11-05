@@ -55,6 +55,7 @@ function jobData(reward: bigint): `0x${string}` {
 function fixture(reward = 5_000_000_000n): SimulationAttempt {
   const jobHash = parseHash32(`0x${"11".repeat(32)}`);
   const feeHash = parseHash32(`0x${"22".repeat(32)}`);
+  const applicationHash = parseHash32(`0x${"33".repeat(32)}`);
   const lock = rewardLock();
   const ownerLock = Object.freeze({ ...lock, args: `0x${"44".repeat(20)}` as const });
   const transaction: UnsignedDeadlineTransaction = Object.freeze({
@@ -70,14 +71,19 @@ function fixture(reward = 5_000_000_000n): SimulationAttempt {
         since: "0x0",
         previousOutput: Object.freeze({ txHash: feeHash, index: "0x0" }),
       }),
+      Object.freeze({
+        since: "0x0",
+        previousOutput: Object.freeze({ txHash: applicationHash, index: "0x0" }),
+      }),
     ]),
     outputs: Object.freeze([
       Object.freeze({ capacity: `0x${reward.toString(16)}` as const, lock, type: null }),
       Object.freeze({ capacity: "0x37e11d600" as const, lock: ownerLock, type: null }),
       Object.freeze({ capacity: "0x253fca1c0" as const, lock, type: null }),
+      Object.freeze({ capacity: "0x12a05f200" as const, lock: ownerLock, type: null }),
     ]),
-    outputsData: Object.freeze(["0x" as const, "0x" as const, "0x" as const]),
-    witnesses: Object.freeze(["0x" as const, "0x" as const]),
+    outputsData: Object.freeze(["0x" as const, "0x" as const, "0x" as const, "0x" as const]),
+    witnesses: Object.freeze(["0x" as const, "0x" as const, "0x1234" as const]),
   });
   const intentHash = parseHash32(
     rawTransactionToHash(transaction as unknown as Parameters<typeof rawTransactionToHash>[0]),
@@ -92,11 +98,16 @@ function fixture(reward = 5_000_000_000n): SimulationAttempt {
         output: Object.freeze({ capacity: "0x4a817c800" }),
         data: jobData(reward),
       }),
-      applicationCells: Object.freeze([]),
+      applicationCells: Object.freeze([
+        Object.freeze({
+          outPoint: Object.freeze({ txHash: applicationHash, index: "0" }),
+          output: Object.freeze({ capacity: "0x12a05f200", lock: ownerLock, type: null }),
+        }),
+      ]),
       feeCells: Object.freeze([
         Object.freeze({
           outPoint: Object.freeze({ txHash: feeHash, index: "0" }),
-          output: Object.freeze({ capacity: "0x2540be400" }),
+          output: Object.freeze({ capacity: "0x2540be400", lock, type: null }),
         }),
       ]),
     }),
@@ -167,10 +178,12 @@ test("a profitable dry-run records bounded simulation evidence", async () => {
     reward: "5000000000",
     margin: "4999000000",
     intentHash: store.attempt.intentHash,
+    feeInputIndex: 1,
   });
   assert.equal(store.rejected, undefined);
   assert.equal(signed.length, 1);
   assert.notEqual(signed[0]?.witnesses[1], "0x");
+  assert.equal(signed[0]?.witnesses[2], "0x1234");
 });
 
 test("uneconomic or altered rewards are rejected before node execution", async () => {

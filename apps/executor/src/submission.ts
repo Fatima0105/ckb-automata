@@ -14,6 +14,7 @@ export interface SubmissionAttempt {
   readonly state: "awaiting_signature" | "submitted";
   readonly transaction?: Readonly<Record<string, unknown>>;
   readonly transactionHash?: Hash32;
+  readonly feeInputIndex?: number;
 }
 
 export interface SubmissionStore {
@@ -123,7 +124,18 @@ export class SubmissionService {
         "approved transaction no longer matches its execution intent",
       );
     }
-    const signed = signOperatorFeeInput(unsigned, this.#privateKey);
+    if (
+      attempt.feeInputIndex === undefined ||
+      !Number.isSafeInteger(attempt.feeInputIndex) ||
+      attempt.feeInputIndex < 0 ||
+      attempt.feeInputIndex >= unsigned.inputs.length
+    ) {
+      throw new SubmissionError(
+        "EXECUTOR_SUBMISSION_RECORD_INVALID",
+        "approved execution is missing its verified fee input index",
+      );
+    }
+    const signed = signOperatorFeeInput(unsigned, this.#privateKey, attempt.feeInputIndex);
     let acceptance: SubmissionAcceptance;
     try {
       const returnedHash = parseHash32(await this.#chain.send(signed));

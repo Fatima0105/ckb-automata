@@ -39,7 +39,7 @@ function transaction(): UnsignedDeadlineTransaction {
 test("operator signing derives the configured lock and preserves raw intent", () => {
   assert.equal(operatorLockArgs(PRIVATE_KEY), "0xb6ac779881b4fe05a167e413ff534469b6b5f6c0");
   const unsigned = transaction();
-  const signed = signOperatorFeeInput(unsigned, PRIVATE_KEY);
+  const signed = signOperatorFeeInput(unsigned, PRIVATE_KEY, 1);
   assert.equal(signed.witnesses[0], unsigned.witnesses[0]);
   assert.match(signed.witnesses[1] ?? "", /^0x[0-9a-f]+$/);
   assert.notEqual(signed.witnesses[1], "0x");
@@ -47,10 +47,17 @@ test("operator signing derives the configured lock and preserves raw intent", ()
     rawTransactionToHash(signed as unknown as Parameters<typeof rawTransactionToHash>[0]),
     rawTransactionToHash(unsigned as unknown as Parameters<typeof rawTransactionToHash>[0]),
   );
-  assert.deepEqual(signOperatorFeeInput(unsigned, PRIVATE_KEY), signed);
+  assert.deepEqual(signOperatorFeeInput(unsigned, PRIVATE_KEY, 1), signed);
 });
 
 test("operator signing rejects invalid keys and input indices", () => {
   assert.throws(() => operatorLockArgs("redacted"), /invalid/);
   assert.throws(() => signOperatorFeeInput(transaction(), PRIVATE_KEY, 2), /input index/);
+});
+
+test("operator signing uses the explicitly verified input rather than a positional default", () => {
+  const unsigned = transaction();
+  const signed = signOperatorFeeInput(unsigned, PRIVATE_KEY, 0);
+  assert.notEqual(signed.witnesses[0], unsigned.witnesses[0]);
+  assert.equal(signed.witnesses[1], unsigned.witnesses[1]);
 });

@@ -52,6 +52,7 @@ function awaiting(): SubmissionAttempt {
     ),
     state: "awaiting_signature",
     transaction: JSON.parse(JSON.stringify(unsigned)) as Record<string, unknown>,
+    feeInputIndex: 1,
   });
 }
 
@@ -258,4 +259,37 @@ test("a node-returned hash mismatch never advances the attempt", async () => {
       error instanceof Error && Reflect.get(error, "code") === "EXECUTOR_SUBMISSION_HASH_MISMATCH",
   );
   assert.deepEqual(store.acceptances, []);
+});
+
+test("submission refuses an unverified or out-of-range fee input index", async () => {
+  const base = awaiting();
+  const { feeInputIndex: _verifiedIndex, ...withoutFeeInputIndex } = base;
+  const attempts: readonly SubmissionAttempt[] = Object.freeze([
+    Object.freeze(withoutFeeInputIndex),
+    Object.freeze({ ...base, feeInputIndex: 2 }),
+  ]);
+  for (const attempt of attempts) {
+    const store = new MemoryStore(attempt);
+    let sends = 0;
+    const service = new SubmissionService({
+      store,
+      privateKey: PRIVATE_KEY,
+      chain: {
+        async send() {
+          sends += 1;
+          return attempt.intentHash;
+        },
+        async getTransactionStatus() {
+          return undefined;
+        },
+      },
+    });
+    await assert.rejects(
+      service.submit(payload(attempt)),
+      (error: unknown) =>
+        error instanceof Error &&
+        Reflect.get(error, "code") === "EXECUTOR_SUBMISSION_RECORD_INVALID",
+    );
+    assert.equal(sends, 0);
+  }
 });

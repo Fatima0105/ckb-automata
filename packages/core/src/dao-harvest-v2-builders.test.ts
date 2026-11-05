@@ -345,7 +345,7 @@ test("wallet completion allows only reviewed funding, plain change, and the fee 
   );
 });
 
-test("wallet completion may reorder the exact reviewed cell dependencies", () => {
+test("wallet completion may reorder dependencies and add its funding lock dependency", () => {
   const input = builderInput();
   const build = buildDaoHarvestV2Transaction({
     ...input,
@@ -364,14 +364,7 @@ test("wallet completion may reorder the exact reviewed cell dependencies", () =>
   ];
 
   assert.doesNotThrow(() => verifyCompletedDaoHarvestV2Transaction(build, completed, funding));
-  assert.throws(() =>
-    verifyCompletedDaoHarvestV2Transaction(
-      build,
-      { ...completed, cellDeps: completed.cellDeps.slice(1) },
-      funding,
-    ),
-  );
-  assert.throws(() =>
+  assert.doesNotThrow(() =>
     verifyCompletedDaoHarvestV2Transaction(
       build,
       {
@@ -381,6 +374,13 @@ test("wallet completion may reorder the exact reviewed cell dependencies", () =>
           { outPoint: { txHash: hash("3"), index: "0x0" }, depType: "code" },
         ],
       },
+      funding,
+    ),
+  );
+  assert.throws(() =>
+    verifyCompletedDaoHarvestV2Transaction(
+      build,
+      { ...completed, cellDeps: completed.cellDeps.slice(1) },
       funding,
     ),
   );

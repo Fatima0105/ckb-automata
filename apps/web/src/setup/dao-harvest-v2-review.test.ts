@@ -4,6 +4,7 @@ import test from "node:test";
 import type { ApiDaoHarvestV2Build } from "@ckb-automata/api-client";
 
 import {
+  daoHarvestV2ReviewSnapshot,
   normalizeDaoHarvestV2Build,
   verifyRefreshedDaoHarvestV2Build,
 } from "./dao-harvest-v2-review.ts";
@@ -55,10 +56,25 @@ test("normalizes every reviewed amount without floating point", () => {
   assert.equal(normalized.completion.maximumFee, 2n);
 });
 
-test("stale reviews reject every changed protocol commitment", () => {
+test("review snapshots remain signable for the bounded creation window", () => {
+  assert.deepEqual(daoHarvestV2ReviewSnapshot({ blockHash: hash("1"), blockNumber: "100" }), {
+    blockHash: hash("1"),
+    blockNumber: "100",
+    expiresAfterBlock: "130",
+  });
+  assert.throws(
+    () => daoHarvestV2ReviewSnapshot({ blockHash: hash("1"), blockNumber: "0100" }),
+    /invalid/,
+  );
+});
+
+test("approval allows fresh-tip timing drift but rejects every stable commitment change", () => {
   const reviewed = build();
   verifyRefreshedDaoHarvestV2Build(reviewed, structuredClone(reviewed));
-  for (const field of ["intentHash", "payloadHash", "progressHash", "prepareCreditHash"] as const) {
+  assert.doesNotThrow(() =>
+    verifyRefreshedDaoHarvestV2Build(reviewed, { ...reviewed, intentHash: hash("9") }),
+  );
+  for (const field of ["jobId", "payloadHash", "progressHash", "prepareCreditHash"] as const) {
     assert.throws(() =>
       verifyRefreshedDaoHarvestV2Build(reviewed, { ...reviewed, [field]: hash("9") }),
     );

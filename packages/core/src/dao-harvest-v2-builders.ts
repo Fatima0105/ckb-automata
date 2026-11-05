@@ -323,10 +323,12 @@ function sameInput(left: UnsignedCellInput, right: UnsignedCellInput): boolean {
   return stable(left) === stable(right);
 }
 
-function sameCellDeps(left: readonly CellDepValue[], right: readonly CellDepValue[]): boolean {
-  if (left.length !== right.length) return false;
-  const unmatched = [...right];
-  for (const required of left) {
+function hasRequiredCellDeps(
+  requiredDeps: readonly CellDepValue[],
+  completedDeps: readonly CellDepValue[],
+): boolean {
+  const unmatched = [...completedDeps];
+  for (const required of requiredDeps) {
     const index = unmatched.findIndex((candidate) => sameCellDepValue(required, candidate));
     if (index === -1) return false;
     unmatched.splice(index, 1);
@@ -375,7 +377,7 @@ export function verifyCompletedDaoHarvestV2Transaction(
   if (stable(completed.headerDeps) !== stable(build.transaction.headerDeps)) {
     throw new Error("wallet changed reviewed header dependencies");
   }
-  if (!sameCellDeps(build.transaction.cellDeps, completed.cellDeps)) {
+  if (!hasRequiredCellDeps(build.transaction.cellDeps, completed.cellDeps)) {
     throw new Error("wallet changed reviewed cell dependencies");
   }
   if (completed.inputs.length < build.completion.requiredInputCount) {

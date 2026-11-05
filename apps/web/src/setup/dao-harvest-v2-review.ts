@@ -1,5 +1,6 @@
 import type { ApiDaoHarvestV2Build } from "@ckb-automata/api-client";
 import {
+  CREATION_REVIEW_WINDOW_BLOCKS,
   parseHash32,
   parseShannons,
   verifyCompletedDaoHarvestV2Transaction,
@@ -12,6 +13,25 @@ interface ReviewInputResolver {
   readonly resolveReviewInput: (
     input: UnsignedDeadlineTransaction["inputs"][number],
   ) => Promise<{ readonly capacity: bigint; readonly lockHash: string }>;
+}
+
+export interface DaoHarvestV2ReviewSnapshot {
+  readonly blockHash: string;
+  readonly blockNumber: string;
+  readonly expiresAfterBlock: string;
+}
+
+export function daoHarvestV2ReviewSnapshot(
+  tip: Readonly<{ blockHash: string; blockNumber: string }>,
+): DaoHarvestV2ReviewSnapshot {
+  parseHash32(tip.blockHash);
+  if (!/^(?:0|[1-9][0-9]*)$/.test(tip.blockNumber)) {
+    throw new Error("The reviewed snapshot block is invalid.");
+  }
+  return Object.freeze({
+    ...tip,
+    expiresAfterBlock: (BigInt(tip.blockNumber) + CREATION_REVIEW_WINDOW_BLOCKS).toString(),
+  });
 }
 
 function transaction(value: unknown): UnsignedDeadlineTransaction {
@@ -98,7 +118,7 @@ export function verifyRefreshedDaoHarvestV2Build(
 ): void {
   if (
     reviewed.operation !== refreshed.operation ||
-    reviewed.intentHash !== refreshed.intentHash ||
+    reviewed.jobId !== refreshed.jobId ||
     reviewed.payloadHash !== refreshed.payloadHash ||
     reviewed.progressHash !== refreshed.progressHash ||
     reviewed.prepareCreditHash !== refreshed.prepareCreditHash

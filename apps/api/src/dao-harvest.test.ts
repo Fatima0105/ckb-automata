@@ -27,7 +27,11 @@ import {
   DaoHarvestReadService,
   DaoHarvestTransactionAdapter,
 } from "./dao-harvest.ts";
-import { DaoHarvestV2MutationService, DaoHarvestV2PendingService } from "./dao-harvest-v2.ts";
+import {
+  DaoHarvestV2MutationService,
+  DaoHarvestV2PendingService,
+  DaoHarvestV2ReadService,
+} from "./dao-harvest-v2.ts";
 import {
   DaoHarvestProjectionStore,
   extractDaoHarvestProjections,
@@ -139,7 +143,49 @@ test("V2 pending reconciliation survives status outages without claiming confirm
     },
   ]);
   fail = false;
-  assert.deepEqual(await service.list(), []);
+  assert.deepEqual(await service.list(), [
+    {
+      transactionHash: `0x${"a".repeat(64)}`,
+      submittedAt: "2026-01-01T00:00:00.000Z",
+      status: "confirming",
+      lastKnownStatus: "confirmed",
+    },
+  ]);
+});
+
+test("V2 reads replace a confirmed pending submission with its canonical projection", async () => {
+  const transactionHash = `0x${"b".repeat(64)}`;
+  const database = {
+    select: (selection?: unknown) =>
+      selection === undefined
+        ? {
+            from: () => ({
+              where: () => ({
+                orderBy: () => ({ limit: async () => [] }),
+              }),
+            }),
+          }
+        : {
+            from: () => ({
+              where: async () => [{ transactionHash }],
+            }),
+          },
+  };
+  const reads = new DaoHarvestV2ReadService(database as never, "ckb_testnet", {
+    list: async () => [
+      {
+        transactionHash,
+        submittedAt: "2026-01-01T00:00:00.000Z",
+        status: "confirming",
+        lastKnownStatus: "confirmed",
+      },
+    ],
+  });
+
+  const result = await reads.list({ limit: "20" });
+
+  assert.deepEqual(result.items, []);
+  assert.deepEqual(result.pendingItems, []);
 });
 
 test("V2 build endpoints fail closed until a chain-aware adapter is deployed", async () => {

@@ -220,7 +220,7 @@ export class DaoHarvestV2PendingService implements DaoHarvestV2PendingProvider {
           observed = undefined;
         }
         const lastKnownStatus = observed ?? submission.lastKnownStatus;
-        if (["confirmed", "conflicted", "dropped"].includes(lastKnownStatus)) return undefined;
+        if (["conflicted", "dropped"].includes(lastKnownStatus)) return undefined;
         return Object.freeze({
           transactionHash: submission.transactionHash,
           submittedAt: submission.submittedAt.toISOString(),
@@ -362,9 +362,29 @@ export class DaoHarvestV2ReadService {
       .orderBy(desc(daoHarvestV2Jobs.observedBlockNumber), desc(daoHarvestV2Jobs.jobId))
       .limit(limit + 1);
     const selected = rows.slice(0, limit);
+    const pendingItems = pageCursor === null ? ((await this.#pending?.list()) ?? []) : [];
+    let visiblePendingItems = pendingItems;
+    if (pendingItems.length > 0) {
+      const canonicalRows = await this.#database
+        .select({ transactionHash: daoHarvestV2Jobs.observedTransactionHash })
+        .from(daoHarvestV2Jobs)
+        .where(
+          and(
+            eq(daoHarvestV2Jobs.networkId, this.#network),
+            inArray(
+              daoHarvestV2Jobs.observedTransactionHash,
+              pendingItems.map((item) => item.transactionHash),
+            ),
+          ),
+        );
+      const canonicalHashes = new Set(canonicalRows.map((row) => row.transactionHash));
+      visiblePendingItems = pendingItems.filter(
+        (item) => !canonicalHashes.has(item.transactionHash),
+      );
+    }
     return Object.freeze({
       items: Object.freeze(selected.map(readModel)),
-      pendingItems: Object.freeze(pageCursor === null ? ((await this.#pending?.list()) ?? []) : []),
+      pendingItems: Object.freeze(visiblePendingItems),
       page: Object.freeze({
         limit,
         nextCursor: rows.length > limit && selected.at(-1) ? encodeCursor(selected.at(-1)!) : null,

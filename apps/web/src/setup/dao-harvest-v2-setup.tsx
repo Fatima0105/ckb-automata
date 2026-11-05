@@ -21,6 +21,7 @@ import {
 } from "./automation-title.ts";
 import { ckbToShannons } from "./ckb-amount.ts";
 import {
+  daoHarvestV2ReviewSnapshot,
   normalizeDaoHarvestV2Build,
   verifyCompletedDaoHarvestV2Review,
   verifyRefreshedDaoHarvestV2Build,
@@ -43,7 +44,7 @@ interface ReadyReview {
   readonly build: ApiDaoHarvestV2Build;
   readonly completed: ReturnType<typeof normalizeDaoHarvestV2Build>["transaction"];
   readonly key: string;
-  readonly snapshot: { readonly blockHash: string; readonly blockNumber: string };
+  readonly snapshot: ReturnType<typeof daoHarvestV2ReviewSnapshot>;
   readonly transactionHash: string;
 }
 
@@ -311,7 +312,7 @@ function HarvestV2Review({
             build,
             completed: completed.transaction,
             key,
-            snapshot: network.tip,
+            snapshot: daoHarvestV2ReviewSnapshot(network.tip),
             transactionHash: completed.hash,
           },
         });

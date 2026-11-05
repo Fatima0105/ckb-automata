@@ -345,6 +345,57 @@ test("wallet completion allows only reviewed funding, plain change, and the fee 
   );
 });
 
+test("wallet completion may reorder the exact reviewed cell dependencies", () => {
+  const input = builderInput();
+  const build = buildDaoHarvestV2Transaction({
+    ...input,
+    cellDeps: [
+      ...input.cellDeps,
+      { outPoint: { txHash: hash("2"), index: "0x1" }, depType: "depGroup" },
+    ],
+  });
+  const { completed: baseCompleted } = completedTransaction();
+  const completed = {
+    ...baseCompleted,
+    cellDeps: build.transaction.cellDeps.toReversed(),
+  };
+  const funding = [
+    { outPoint: completed.inputs.at(-1)!.previousOutput, capacity: 50n, lockHash: fundingLockHash },
+  ];
+
+  assert.doesNotThrow(() => verifyCompletedDaoHarvestV2Transaction(build, completed, funding));
+  assert.throws(() =>
+    verifyCompletedDaoHarvestV2Transaction(
+      build,
+      { ...completed, cellDeps: completed.cellDeps.slice(1) },
+      funding,
+    ),
+  );
+  assert.throws(() =>
+    verifyCompletedDaoHarvestV2Transaction(
+      build,
+      {
+        ...completed,
+        cellDeps: [
+          ...completed.cellDeps,
+          { outPoint: { txHash: hash("3"), index: "0x0" }, depType: "code" },
+        ],
+      },
+      funding,
+    ),
+  );
+  assert.throws(() =>
+    verifyCompletedDaoHarvestV2Transaction(
+      build,
+      {
+        ...completed,
+        cellDeps: [{ ...completed.cellDeps[0]!, depType: "code" }, ...completed.cellDeps.slice(1)],
+      },
+      funding,
+    ),
+  );
+});
+
 test("wallet completion rejects every reviewed transaction surface mutation", () => {
   const { build, completed } = completedTransaction();
   const funding = [

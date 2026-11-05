@@ -17,6 +17,7 @@ import {
   parseHash32,
   parseShannons,
   sameCellDepValue,
+  type CellDepValue,
   type Hash32,
   type IntegerInput,
   type Shannons,
@@ -322,6 +323,17 @@ function sameInput(left: UnsignedCellInput, right: UnsignedCellInput): boolean {
   return stable(left) === stable(right);
 }
 
+function sameCellDeps(left: readonly CellDepValue[], right: readonly CellDepValue[]): boolean {
+  if (left.length !== right.length) return false;
+  const unmatched = [...right];
+  for (const required of left) {
+    const index = unmatched.findIndex((candidate) => sameCellDepValue(required, candidate));
+    if (index === -1) return false;
+    unmatched.splice(index, 1);
+  }
+  return true;
+}
+
 function witnessPolicyFields(value: Hex): { readonly inputType: Hex; readonly outputType: Hex } {
   const witnessBytes = hexToBytes(value);
   if (witnessBytes.length < 16) throw new Error("wallet returned an invalid reviewed witness");
@@ -363,12 +375,7 @@ export function verifyCompletedDaoHarvestV2Transaction(
   if (stable(completed.headerDeps) !== stable(build.transaction.headerDeps)) {
     throw new Error("wallet changed reviewed header dependencies");
   }
-  if (
-    completed.cellDeps.length !== build.transaction.cellDeps.length ||
-    !build.transaction.cellDeps.every((dep, index) =>
-      sameCellDepValue(dep, completed.cellDeps[index]!),
-    )
-  ) {
+  if (!sameCellDeps(build.transaction.cellDeps, completed.cellDeps)) {
     throw new Error("wallet changed reviewed cell dependencies");
   }
   if (completed.inputs.length < build.completion.requiredInputCount) {

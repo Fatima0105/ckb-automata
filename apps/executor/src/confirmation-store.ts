@@ -108,6 +108,7 @@ export class PostgresConfirmationStore implements ConfirmationStore {
       SELECT id, tx_hash
       FROM transaction_attempts
       WHERE network_id = ${this.#network}
+        AND job_id IS NOT NULL
         AND state IN ('submitted', 'proposed', 'committed')
         AND tx_hash IS NOT NULL
         ${after === undefined ? this.#sql`` : this.#sql`AND id > ${after}`}

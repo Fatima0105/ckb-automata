@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "0.3.0",
+  "network": "ckb_testnet",
+  "genesisHash": "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
+  "sourceRevision": "279335501574f8927390c1fbe8a63c39ceda96f1",
+  "deployment": {
+    "transactionHash": "0x36d6b118fd045c95d4d02e0890aac6c2619d23f1baeec0b8561f30bf37896d02",
+    "blockHash": "0x6844dc7c9c00220d178edfac1cc45fc2ba48fd63175dcd5ceaee59d6fe37f3e3",
+    "blockNumber": "0x15ebff8"
+  },
+  "secp256k1Blake160": {
+    "cellDep": {
+      "outPoint": {
+        "txHash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+        "index": "0x0"
+      },
+      "depType": "depGroup"
+    }
+  },
+  "contracts": {
+    "jobLock": {
+      "codeHash": "0xcd01020990bbd30c3eb6cd20c3eeccaee2e0196ceba86df34888aa4f6992c541",
+      "hashType": "data1",
+      "binarySha256": "79ab045c5c05db08df44e719d6f42831d1aee6eeb9a0074b43503079b494e2da",
+      "sizeBytes": 41224,
+      "cellDep": {
+        "outPoint": {
+          "txHash": "0x36d6b118fd045c95d4d02e0890aac6c2619d23f1baeec0b8561f30bf37896d02",
+          "index": "0x0"
+        },
+        "depType": "code"
+      }
+    },
+    "deadlinePolicy": {
+      "codeHash": "0xe800339a0b369b1ee27665ffbd680031516822b7c8a3e1f4844506953517c1b5",
+      "hashType": "data1",
+      "binarySha256": "4305626d4b85c6c7f638180b4c9568c8c85e335e37d3bafd43fa2ee2c0f46136",
+      "sizeBytes": 34320,
+      "cellDep": {
+        "outPoint": {
+          "txHash": "0x36d6b118fd045c95d4d02e0890aac6c2619d23f1baeec0b8561f30bf37896d02",
+          "index": "0x1"
+        },
+        "depType": "code"
+      }
+    },
+    "recurringPolicy": {
+      "codeHash": "0xbbdef4eba1cf275440d05fd9ec2138decd2cd0d0aa321edc776cb16f6486e750",
+      "hashType": "data1",
+      "binarySha256": "4fe5d9048473117242c39d529770d35eeec3cd8aa9e27f657c86c5534a1f8105",
+      "sizeBytes": 38696,
+      "cellDep": {
+        "outPoint": {
+          "txHash": "0x36d6b118fd045c95d4d02e0890aac6c2619d23f1baeec0b8561f30bf37896d02",
+          "index": "0x2"
+        },
+        "depType": "code"
+      }
+    }
+  },
+  "defaultPreferredOperatorLockHash": "0x56f7b4edac9e6c7ffecdce54817b1f6903eec6e4ac589bae8dd2bb9d7a3bd7fb"
+}

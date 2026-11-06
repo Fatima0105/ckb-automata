@@ -103,6 +103,7 @@ export interface ExecutorBootstrapDependencies {
   ) => Promise<INestApplicationContext>;
   readonly createChainClient?: ExecutorModuleDependencies["createChainClient"];
   readonly enableDeadLetterWorkers?: boolean;
+  readonly enableDaoHarvestV2Runtime?: boolean;
   readonly enableBuildWorkers?: boolean;
   readonly enableConfirmationWorkers?: boolean;
   readonly enableEligibilityWorkers?: boolean;
@@ -143,6 +144,9 @@ export async function createExecutorApplication(
     ...(dependencies.enableDeadLetterWorkers === undefined
       ? {}
       : { enableDeadLetterWorkers: dependencies.enableDeadLetterWorkers }),
+    ...(dependencies.enableDaoHarvestV2Runtime === undefined
+      ? {}
+      : { enableDaoHarvestV2Runtime: dependencies.enableDaoHarvestV2Runtime }),
     ...(dependencies.enableBuildWorkers === undefined
       ? {}
       : { enableBuildWorkers: dependencies.enableBuildWorkers }),

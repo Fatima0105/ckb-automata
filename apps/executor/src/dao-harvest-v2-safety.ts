@@ -58,6 +58,11 @@ export interface DaoHarvestV2ScheduleRecord {
   readonly fallbackPrepareOperatorLockHashes: readonly Hash32[];
 }
 
+export interface DaoHarvestV2OperatorIdentity {
+  readonly ownerLockHash: Hash32;
+  readonly accumulatorLockHash: Hash32;
+}
+
 export type DaoHarvestV2ScheduleDecision =
   | {
       readonly status: "ready";
@@ -161,10 +166,19 @@ function validateSchedule(record: DaoHarvestV2ScheduleRecord) {
 export function evaluateDaoHarvestV2Schedule(
   record: DaoHarvestV2ScheduleRecord,
   tipEpochValue: IntegerInput,
-  operatorLockHashValue: Hash32,
+  operatorIdentityValue: Hash32 | DaoHarvestV2OperatorIdentity,
 ): DaoHarvestV2ScheduleDecision {
   const parsed = validateSchedule(record);
-  const operator = parseHash32(operatorLockHashValue);
+  const operator =
+    typeof operatorIdentityValue === "string"
+      ? Object.freeze({
+          ownerLockHash: parseHash32(operatorIdentityValue),
+          accumulatorLockHash: parseHash32(operatorIdentityValue),
+        })
+      : Object.freeze({
+          ownerLockHash: parseHash32(operatorIdentityValue.ownerLockHash),
+          accumulatorLockHash: parseHash32(operatorIdentityValue.accumulatorLockHash),
+        });
   const tip = parseEpoch(tipEpochValue);
   const base = Object.freeze({
     jobId: parsed.jobId,
@@ -184,8 +198,10 @@ export function evaluateDaoHarvestV2Schedule(
   }
 
   const isPreferred =
-    record.state === "deposited" ? operator === parsed.preferred : operator === parsed.credited;
-  const isFallbackPrepare = parsed.fallback.includes(operator);
+    record.state === "deposited"
+      ? operator.ownerLockHash === parsed.preferred
+      : operator.accumulatorLockHash === parsed.credited;
+  const isFallbackPrepare = parsed.fallback.includes(operator.ownerLockHash);
   const preferredOperation = record.state === "deposited" ? "preferred_prepare" : "preferred_claim";
   const fallbackOperation = record.state === "deposited" ? "fallback_prepare" : "fallback_claim";
   const operation = isPreferred ? preferredOperation : fallbackOperation;
@@ -270,7 +286,7 @@ export function createDaoHarvestV2ExecutionPlan(input: {
   readonly adapterId: DaoHarvestAdapterId;
   readonly record: DaoHarvestV2ScheduleRecord;
   readonly tipEpoch: IntegerInput;
-  readonly operatorLockHash: Hash32;
+  readonly operatorLockHash: Hash32 | DaoHarvestV2OperatorIdentity;
   readonly consumedInputs: readonly OutPoint[];
   readonly economics: DaoHarvestV2ExecutionEconomics;
   readonly dryRun: DaoHarvestV2DryRunEvidence;
@@ -372,7 +388,7 @@ export function validateDaoHarvestV2Reload(
   input: {
     readonly record: DaoHarvestV2ScheduleRecord;
     readonly tipEpoch: IntegerInput;
-    readonly operatorLockHash: Hash32;
+    readonly operatorLockHash: Hash32 | DaoHarvestV2OperatorIdentity;
     readonly consumedInputs: readonly OutPoint[];
   },
 ): void {

@@ -73,6 +73,8 @@ services:
         value: https://testnet.ckbapp.dev/
       - key: CKB_INDEXER_URL
         value: https://testnet.ckbapp.dev/
+      - key: DAO_HARVEST_V2_MANIFEST_PATH
+        value: ../../deploy/manifests/dao-harvest-v2-testnet.json
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
@@ -87,7 +89,7 @@ services:
       - key: EXECUTOR_INSTANCE_ID
         value: operator-a
       - key: EXECUTOR_SUPPORTED_POLICIES
-        value: deadline,recurring,dao-harvest
+        value: deadline,recurring,dao-harvest,dao-harvest-v2
       - key: EXECUTOR_LOCK_ARGS
         sync: false
       - key: EXECUTOR_TRANSACTION_FEE
@@ -127,6 +129,8 @@ services:
         value: https://testnet.ckbapp.dev/
       - key: CKB_INDEXER_URL
         value: https://testnet.ckbapp.dev/
+      - key: DAO_HARVEST_V2_MANIFEST_PATH
+        value: ../../deploy/manifests/dao-harvest-v2-testnet.json
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
@@ -141,7 +145,7 @@ services:
       - key: EXECUTOR_INSTANCE_ID
         value: operator-b
       - key: EXECUTOR_SUPPORTED_POLICIES
-        value: deadline,recurring,dao-harvest
+        value: deadline,recurring,dao-harvest,dao-harvest-v2
       - key: EXECUTOR_LOCK_ARGS
         sync: false
       - key: EXECUTOR_TRANSACTION_FEE

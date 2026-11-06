@@ -250,8 +250,10 @@ function validIndices(operation: DaoHarvestV2Operation): DaoHarvestV2WitnessIndi
         "jobInputIndex",
         "vaultInputIndex",
         "identityInputIndex",
+        "prepareAccumulatorInputIndex",
         "jobOutputIndex",
         "vaultOutputIndex",
+        "prepareAccumulatorOutputIndex",
       ]);
       break;
     case DAO_HARVEST_V2_OPERATIONS.PREFERRED_CLAIM:

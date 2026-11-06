@@ -92,8 +92,10 @@ function indicesFor(operation: DaoHarvestV2Operation): DaoHarvestV2WitnessIndice
         "jobInputIndex",
         "vaultInputIndex",
         "identityInputIndex",
+        "prepareAccumulatorInputIndex",
         "jobOutputIndex",
         "vaultOutputIndex",
+        "prepareAccumulatorOutputIndex",
       ]);
     case DAO_HARVEST_V2_OPERATIONS.PREFERRED_CLAIM:
     case DAO_HARVEST_V2_OPERATIONS.OWNER_COMPLETE:

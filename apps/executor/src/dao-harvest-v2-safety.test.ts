@@ -123,6 +123,22 @@ test("credited preparer claims first and another executor takes over after timeo
   });
 });
 
+test("prepare authorization uses the owner lock while preferred claim uses its accumulator", () => {
+  const accumulator = hash("9");
+  const identity = { ownerLockHash: preferred, accumulatorLockHash: accumulator } as const;
+  assert.equal(evaluateDaoHarvestV2Schedule(record(), tip(100n), identity).status, "ready");
+  const withdrawing = record({
+    state: "withdrawing",
+    sequence: 1n,
+    notBeforeSince: absolute(280n),
+    prepareCutoffSince: null,
+    creditedPrepareOperatorLockHash: accumulator,
+  });
+  const decision = evaluateDaoHarvestV2Schedule(withdrawing, tip(280n), identity);
+  assert.equal(decision.status, "ready");
+  if (decision.status === "ready") assert.equal(decision.operation, "preferred_claim");
+});
+
 test("missed windows, end bounds, spent jobs, cycle limits, and reorgs fail closed", () => {
   assert.equal(evaluateDaoHarvestV2Schedule(record(), tip(110n), preferred).status, "unavailable");
   assert.equal(

@@ -1,6 +1,6 @@
 {
   "name": "@ckb-automata/operator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Standalone public-RPC operator for CKAutomata DAO Harvest V2",
   "type": "module",
@@ -21,6 +21,7 @@
     "node": ">=24.11.1"
   },
   "dependencies": {
+    "@ckb-automata/ccc": "workspace:*",
     "@ckb-automata/core": "workspace:*",
     "@ckb-automata/molecule": "workspace:*",
     "@ckb-automata/telemetry": "workspace:*",

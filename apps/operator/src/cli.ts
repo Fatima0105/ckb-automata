@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 
-import { parseHash32 } from "@ckb-automata/core";
+import { parseHash32, parseOutputIndex } from "@ckb-automata/core";
 
 import { parseOperatorConfiguration, publicOperatorConfiguration } from "./config.ts";
 import { discoverHarvestV2Jobs } from "./discovery.ts";
@@ -14,8 +14,23 @@ import {
   loadExecutionBundle,
   submitFallbackClaim,
 } from "./transaction.ts";
+import {
+  buildFallbackClaimBundle,
+  provisionOperatorAccumulator,
+  writeExecutionBundle,
+} from "./workflow.ts";
 
-const PACKAGE_VERSION = "0.1.0";
+const PACKAGE_VERSION = "0.2.0";
+
+function jobOutPoint(value: string | undefined) {
+  if (!value) throw new Error("--job-out-point is required");
+  const separator = value.lastIndexOf(":");
+  if (separator < 1) throw new Error("--job-out-point must be <transaction-hash>:<output-index>");
+  return Object.freeze({
+    txHash: parseHash32(value.slice(0, separator)),
+    index: parseOutputIndex(value.slice(separator + 1)),
+  });
+}
 
 function output(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -33,6 +48,8 @@ function guide() {
       "config",
       "verify-manifest",
       "discover",
+      "setup",
+      "build --job-out-point <hash:index> --output <file>",
       "dry-run --bundle <file>",
       "submit --bundle <file>",
       "confirm --tx-hash <hash>",
@@ -57,6 +74,8 @@ export async function runOperatorCli(
     strict: true,
     options: {
       bundle: { type: "string" },
+      output: { type: "string" },
+      "job-out-point": { type: "string" },
       "tx-hash": { type: "string" },
       limit: { type: "string", default: "100" },
       version: { type: "boolean", short: "v" },
@@ -94,6 +113,24 @@ export async function runOperatorCli(
       manifestSha256: loaded.sha256,
       jobs: await discoverHarvestV2Jobs(loaded.manifest, indexer, limit),
     });
+    return 0;
+  }
+  if (command === "setup") {
+    await verifyOperatorManifest(loaded, rpc, config.expectedGenesisHash);
+    output(await provisionOperatorAccumulator(loaded, config, rpc, indexer));
+    return 0;
+  }
+  if (command === "build") {
+    if (!parsed.values.output) throw new Error("--output is required");
+    await verifyOperatorManifest(loaded, rpc, config.expectedGenesisHash);
+    const bundle = await buildFallbackClaimBundle(
+      jobOutPoint(parsed.values["job-out-point"]),
+      loaded,
+      config,
+      rpc,
+      indexer,
+    );
+    output(await writeExecutionBundle(parsed.values.output, bundle));
     return 0;
   }
   if (command === "dry-run" || command === "submit") {

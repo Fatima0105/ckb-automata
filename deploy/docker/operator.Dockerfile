@@ -1,7 +1,7 @@
 FROM node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57
 
 LABEL org.opencontainers.image.title="CKAutomata external operator" \
-      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.version="0.2.0" \
       org.opencontainers.image.description="Public-RPC DAO Harvest V2 operator"
 
 WORKDIR /app

@@ -13,10 +13,12 @@ import {
 } from "@nervosnetwork/ckb-sdk-utils";
 
 import {
+  DAO_HARVEST_VAULT_OCCUPIED_CAPACITY,
   DAO_HARVEST_V2_ABSENT_INDEX,
   DAO_HARVEST_V2_OPERATIONS,
   addEpochFractions,
   assertHarvestV2TransactionWithinLimits,
+  calculateDaoMaximumWithdraw,
   compareEpochFractions,
   decodeAbsoluteEpochSince,
   decodeRelativeEpochSince,
@@ -33,6 +35,7 @@ import {
   type ScriptIdentity,
   type UnsignedDeadlineTransaction,
 } from "@ckb-automata/core";
+import { clientDaoAccumulatedRate } from "@ckb-automata/ccc";
 import {
   DaoHarvestEnvelopeV2,
   DaoHarvestPayloadV2,
@@ -188,7 +191,7 @@ function toRpcScript(script: ScriptIdentity) {
   return { code_hash: script.codeHash, hash_type: script.hashType, args: script.args };
 }
 
-function toRpcTransaction(transaction: UnsignedDeadlineTransaction) {
+export function toRpcTransaction(transaction: UnsignedDeadlineTransaction) {
   return {
     version: transaction.version,
     cell_deps: transaction.cellDeps.map((dep) => ({
@@ -213,7 +216,7 @@ function toRpcTransaction(transaction: UnsignedDeadlineTransaction) {
   };
 }
 
-function signedTransaction(
+export function signOperatorTransaction(
   transaction: UnsignedDeadlineTransaction,
   privateKey: string,
   lockGroupInputIndices: readonly number[],
@@ -253,7 +256,7 @@ function signedTransaction(
   return Object.freeze({ ...transaction, witnesses: Object.freeze(witnesses) });
 }
 
-function operatorLockArgs(privateKey: string): Hex {
+export function operatorLockArgs(privateKey: string): Hex {
   return `0x${blake160(new ECPair(privateKey).publicKey, "hex")}`;
 }
 
@@ -263,6 +266,7 @@ export async function dryRunFallbackClaim(
   config: OperatorConfiguration,
   rpc: JsonRpcClient,
 ) {
+  if (!config.privateKey) throw new Error("OPERATOR_PRIVATE_KEY is required for a chain dry-run");
   if (bundle.manifestSha256 !== loadedManifest.sha256) {
     throw new Error("execution bundle targets a different deployment manifest");
   }
@@ -376,11 +380,42 @@ export async function dryRunFallbackClaim(
   ) {
     throw new Error("operator accumulator payments exceed the committed charge caps");
   }
-  const totalInput = resolved.reduce((total, input) => total + input.capacity, 0n);
+  const vaultInput = resolved[indices.vault];
+  if (!vaultInput || transaction.headerDeps.length !== 2) {
+    throw new Error("fallback claim DAO input or header dependencies are invalid");
+  }
+  const [depositHeaderValue, prepareHeaderValue] = await Promise.all(
+    transaction.headerDeps.map((hash) => rpc.call("get_header", [hash])),
+  );
+  const depositHeader = record(depositHeaderValue, "deposit header");
+  const prepareHeader = record(prepareHeaderValue, "prepare header");
+  const maximumWithdraw = calculateDaoMaximumWithdraw({
+    principal: payload.principal_capacity.toString(),
+    occupiedCapacity: DAO_HARVEST_VAULT_OCCUPIED_CAPACITY,
+    depositAccumulatedRate: clientDaoAccumulatedRate(depositHeader["dao"]),
+    withdrawingAccumulatedRate: clientDaoAccumulatedRate(prepareHeader["dao"]),
+  });
+  const totalInput =
+    resolved.reduce((total, input) => total + input.capacity, 0n) -
+    vaultInput.capacity +
+    maximumWithdraw;
   const networkFee = totalInput - outputCapacity(transaction);
   if (networkFee < 0n) throw new Error("fallback claim creates capacity");
+  const expectedOwnerLock: ScriptIdentity = Object.freeze({
+    codeHash: loadedManifest.manifest.secp256k1Blake160.codeHash,
+    hashType: "type" as const,
+    args: operatorLockArgs(config.privateKey),
+  });
+  const expectedOwnerLockHash = parseHash32(scriptToHash(expectedOwnerLock));
+  const signingInputIndices = resolved.flatMap((input, index) =>
+    parseHash32(scriptToHash(input.lock)) === expectedOwnerLockHash ? [index] : [],
+  );
+  if (signingInputIndices.length === 0) {
+    throw new Error("operator private key does not control a transaction funding input");
+  }
+  const signed = signOperatorTransaction(transaction, config.privateKey, signingInputIndices);
   const dryRun = record(
-    await rpc.call("dry_run_transaction", [toRpcTransaction(transaction)]),
+    await rpc.call("dry_run_transaction", [toRpcTransaction(signed)]),
     "dry-run result",
   );
   const cycles = BigInt(string(dryRun["cycles"], "dry-run cycles"));
@@ -427,6 +462,7 @@ export async function dryRunFallbackClaim(
     serializedBytes: boundary.serializedBytes.toString(),
     identityInputIndex: indices.identity,
     operatorInputIndices: Object.freeze(operatorInputIndices),
+    signingInputIndices: Object.freeze(signingInputIndices),
   });
 }
 
@@ -438,15 +474,10 @@ export async function submitFallbackClaim(
 ) {
   if (!config.privateKey) throw new Error("OPERATOR_PRIVATE_KEY is required for submission");
   const evidence = await dryRunFallbackClaim(bundle, loadedManifest, config, rpc);
-  const expectedArgs = operatorLockArgs(config.privateKey);
-  const identity = await resolveInputs(bundle.transaction, rpc);
-  if (identity[evidence.identityInputIndex]?.lock.args !== expectedArgs) {
-    throw new Error("operator private key does not control the reviewed identity input");
-  }
-  const signed = signedTransaction(
+  const signed = signOperatorTransaction(
     bundle.transaction,
     config.privateKey,
-    evidence.operatorInputIndices,
+    evidence.signingInputIndices,
   );
   const returned = parseHash32(
     await rpc.call<string>("send_transaction", [toRpcTransaction(signed), "passthrough"]),

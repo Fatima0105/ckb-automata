@@ -18,6 +18,8 @@ import {
 } from "@nervosnetwork/ckb-sdk-utils";
 
 import {
+  DAO_HARVEST_VAULT_OCCUPIED_CAPACITY,
+  DAO_HARVEST_V2_ABSENT_INDEX,
   DAO_HARVEST_V2_OPERATIONS,
   createEpoch,
   deriveDaoHarvestV2PayloadHash,
@@ -27,6 +29,8 @@ import {
   encodeAbsoluteEpochSince,
   encodeRelativeEpochSince,
   packEpoch,
+  parseHash32,
+  parseOutputIndex,
   type Hash32,
   type ScriptIdentity,
   type UnsignedDeadlineTransaction,
@@ -50,6 +54,7 @@ import {
   submitFallbackClaim,
   type OperatorExecutionBundle,
 } from "./transaction.ts";
+import { buildFallbackClaimBundle, provisionOperatorAccumulator } from "./workflow.ts";
 
 const hash = (value: string): Hash32 => `0x${value.repeat(64).slice(0, 64)}` as Hash32;
 const bytes = (value: Hash32): Uint8Array => hexToBytes(value);
@@ -68,6 +73,14 @@ const script = (value: string): ScriptIdentity => ({
   hashType: "data1",
   args: "0x",
 });
+
+function witnessInputType(value: `0x${string}`): Uint8Array {
+  const raw = hexToBytes(value);
+  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  const second = view.getUint32(8, true);
+  const third = view.getUint32(12, true);
+  return raw.slice(second + 4, third);
+}
 
 class RpcFixture implements JsonRpcClient {
   readonly calls: { method: string; params: readonly unknown[] }[] = [];
@@ -121,13 +134,28 @@ async function manifestFixture() {
   };
   const json = {
     schemaVersion: 2,
-    releaseVersion: "0.1.0",
+    releaseVersion: "0.2.0",
     network: "ckb_testnet",
     genesisHash: hash("a"),
     sourceRevision: "b".repeat(40),
+    predecessorManifests: [],
+    secp256k1Blake160: {
+      codeHash: hash("e"),
+      hashType: "type",
+      cellDep: { outPoint: { txHash: hash("e"), index: "0x0" }, depType: "depGroup" },
+    },
+    nervosDao: {
+      codeHash: hash("d"),
+      hashType: "type",
+      cellDep: { outPoint: { txHash: hash("d"), index: "0x0" }, depType: "code" },
+    },
     contracts: Object.fromEntries(
       Object.entries(contracts).map(([name, item]) => [name, item.value]),
     ),
+    operators: {
+      preferredPrepareLockHash: hash("a"),
+      fallbackPrepareLockHashes: [hash("b")],
+    },
   };
   const directory = await mkdtemp(join(tmpdir(), "ckautomata-operator-"));
   const path = join(directory, "manifest.json");
@@ -240,19 +268,31 @@ test("job discovery uses the V2 Job Lock and policy binding", async () => {
 function fallbackClaimFixture(
   manifest: OperatorManifest,
   manifestSha256: string,
-  claimant = script("c"),
+  privateKey = `0x${"1".repeat(64)}`,
 ) {
   const owner = script("a");
   const preparer = script("b");
-  const fallbackSet = deriveDaoHarvestV2FallbackOperatorSetHash([
-    bytes(scriptToHash(claimant) as Hash32),
-  ]);
+  const operatorOwner: ScriptIdentity = {
+    codeHash: manifest.secp256k1Blake160.codeHash,
+    hashType: "type",
+    args: `0x${blake160(new ECPair(privateKey).publicKey, "hex")}`,
+  };
   const policyScript = {
     codeHash: manifest.contracts.policy.codeHash as Hash32,
     hashType: "data1" as const,
     args: manifest.contracts.jobLock.codeHash as `0x${string}`,
   };
   const policyHash = scriptToHash(policyScript) as Hash32;
+  const claimant: ScriptIdentity = {
+    codeHash: manifest.contracts.compensationLock.codeHash,
+    hashType: "data1",
+    args: bytesToHex(
+      Uint8Array.from([...bytes(scriptToHash(operatorOwner) as Hash32), ...bytes(policyHash)]),
+    ) as `0x${string}`,
+  };
+  const fallbackSet = deriveDaoHarvestV2FallbackOperatorSetHash([
+    bytes(scriptToHash(claimant) as Hash32),
+  ]);
   const jobId = hash("8");
   const payload = DaoHarvestPayloadV2.pack({
     version: 2,
@@ -261,7 +301,7 @@ function fallbackClaimFixture(
     vault_lock_code_hash: [...bytes(manifest.contracts.vaultLock.codeHash as Hash32)],
     compensation_lock_code_hash: [...bytes(manifest.contracts.compensationLock.codeHash as Hash32)],
     dao_type_hash: [...bytes(hash("d"))],
-    principal_capacity: "1000",
+    principal_capacity: DAO_HARVEST_VAULT_OCCUPIED_CAPACITY.toString(),
     preferred_prepare_operator_lock_hash: [...bytes(scriptToHash(preparer) as Hash32)],
     fallback_prepare_executor_set_hash: [...fallbackSet],
     prepare_service_fee: "10",
@@ -340,8 +380,17 @@ function fallbackClaimFixture(
     claimant,
     preparer,
     claimant,
+    operatorOwner,
   ];
-  const inputCapacities = [100n, 1_000n, 300n, 1_000n, 100n, 100n];
+  const inputCapacities = [
+    100n,
+    DAO_HARVEST_VAULT_OCCUPIED_CAPACITY,
+    300n,
+    1_000n,
+    100n,
+    100n,
+    1_000n,
+  ];
   const transaction: UnsignedDeadlineTransaction = {
     version: "0x0",
     cellDeps: Object.values(manifest.contracts).map((contract) => ({
@@ -361,13 +410,18 @@ function fallbackClaimFixture(
     })),
     outputs: [
       { capacity: "0x64", lock: inputLocks[0]!, type: policyScript },
-      { capacity: "0x3e8", lock: inputLocks[1]!, type: script("d") },
+      {
+        capacity: `0x${DAO_HARVEST_VAULT_OCCUPIED_CAPACITY.toString(16)}`,
+        lock: inputLocks[1]!,
+        type: script("d"),
+      },
       { capacity: "0x104", lock: inputLocks[2]!, type: null },
       { capacity: "0x6e", lock: preparer, type: null },
       { capacity: "0x78", lock: claimant, type: null },
       { capacity: "0x3e8", lock: claimant, type: null },
+      { capacity: "0x3e8", lock: operatorOwner, type: null },
     ],
-    outputsData: [bytesToHex(jobData) as `0x${string}`, "0x", "0x", "0x", "0x", "0x"],
+    outputsData: [bytesToHex(jobData) as `0x${string}`, "0x", "0x", "0x", "0x", "0x", "0x"],
     witnesses: [
       serializeWitnessArgs({
         lock: "",
@@ -383,14 +437,27 @@ function fallbackClaimFixture(
     jobId,
     transaction,
   };
-  return { bundle, inputLocks, inputCapacities, jobData };
+  return {
+    bundle,
+    inputLocks,
+    inputCapacities,
+    jobData,
+    payload,
+    progress,
+    credit,
+    policyScript,
+    preparer,
+    claimant,
+    operatorOwner,
+  };
 }
 
 test("fallback claim dry-run derives authority, payments, limits, and margin from live data", async () => {
   const fixture = await manifestFixture();
   try {
     const loaded = await loadOperatorManifest(fixture.path);
-    const claim = fallbackClaimFixture(loaded.manifest, loaded.sha256);
+    const privateKey = `0x${"1".repeat(64)}`;
+    const claim = fallbackClaimFixture(loaded.manifest, loaded.sha256, privateKey);
     const rpc = new RpcFixture({
       get_live_cell: (params: readonly unknown[]) => {
         const outPoint = params[0] as { tx_hash: string };
@@ -411,12 +478,14 @@ test("fallback claim dry-run derives authority, payments, limits, and margin fro
         };
       },
       dry_run_transaction: { cycles: "0x3e8" },
+      get_header: { dao: { c: "0", ar: "100", s: "0", u: "0" } },
       get_tip_header: { epoch: `0x${packEpoch(epoch(102)).toString(16)}` },
     });
     const config = parseOperatorConfiguration({
       CKB_RPC_URL: "https://rpc.example/",
       CKB_INDEXER_URL: "https://indexer.example/",
       OPERATOR_MANIFEST_PATH: fixture.path,
+      OPERATOR_PRIVATE_KEY: privateKey,
       OPERATOR_MINIMUM_PROFIT_MARGIN: "5",
     });
     const result = await dryRunFallbackClaim(claim.bundle, loaded, config, rpc);
@@ -434,12 +503,7 @@ test("submission signs the complete operator lock group and broadcasts the revie
   try {
     const loaded = await loadOperatorManifest(fixture.path);
     const privateKey = `0x${"1".repeat(64)}`;
-    const claimant: ScriptIdentity = {
-      codeHash: hash("c"),
-      hashType: "data1",
-      args: `0x${blake160(new ECPair(privateKey).publicKey, "hex")}`,
-    };
-    const claim = fallbackClaimFixture(loaded.manifest, loaded.sha256, claimant);
+    const claim = fallbackClaimFixture(loaded.manifest, loaded.sha256, privateKey);
     const transactionHash = rawTransactionToHash(
       claim.bundle.transaction as unknown as Parameters<typeof rawTransactionToHash>[0],
     );
@@ -464,6 +528,7 @@ test("submission signs the complete operator lock group and broadcasts the revie
         };
       },
       dry_run_transaction: { cycles: "0x3e8" },
+      get_header: { dao: { c: "0", ar: "100", s: "0", u: "0" } },
       get_tip_header: { epoch: `0x${packEpoch(epoch(102)).toString(16)}` },
       send_transaction: (params: readonly unknown[]) => {
         broadcast = params[0] as Record<string, unknown>;
@@ -481,8 +546,251 @@ test("submission signs the complete operator lock group and broadcasts the revie
     assert.equal(result.status, "submitted");
     assert.equal(result.transactionHash, transactionHash);
     const witnesses = broadcast?.["witnesses"] as string[];
-    assert.notEqual(witnesses[3], "0x");
-    assert.equal(witnesses[5], "0x");
+    assert.notEqual(witnesses[6], "0x");
+    assert.equal(witnesses[3], "0x");
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("operator setup provisions a contract-bound accumulator from a signed fee cell", async () => {
+  const fixture = await manifestFixture();
+  try {
+    const loaded = await loadOperatorManifest(fixture.path);
+    const privateKey = `0x${"2".repeat(64)}`;
+    const ownerArgs = `0x${blake160(new ECPair(privateKey).publicKey, "hex")}`;
+    const fundingHash = hash("7");
+    let broadcast: Record<string, unknown> | undefined;
+    const indexer = new RpcFixture({
+      get_cells: (params: readonly unknown[]) => {
+        const search = params[0] as { script: { code_hash: string } };
+        return {
+          objects:
+            search.script.code_hash === loaded.manifest.secp256k1Blake160.codeHash
+              ? [
+                  {
+                    out_point: { tx_hash: fundingHash, index: "0x0" },
+                    output_data: "0x",
+                  },
+                ]
+              : [],
+        };
+      },
+    });
+    const rpc = new RpcFixture({
+      get_live_cell: {
+        status: "live",
+        cell: {
+          output: {
+            capacity: "0x4a817c8500",
+            lock: {
+              code_hash: loaded.manifest.secp256k1Blake160.codeHash,
+              hash_type: "type",
+              args: ownerArgs,
+            },
+            type: null,
+          },
+          data: { content: "0x" },
+        },
+      },
+      dry_run_transaction: { cycles: "0x3e8" },
+      send_transaction: (params: readonly unknown[]) => {
+        broadcast = params[0] as Record<string, unknown>;
+        return hash("9");
+      },
+    });
+    const config = parseOperatorConfiguration({
+      CKB_RPC_URL: "https://rpc.example/",
+      CKB_INDEXER_URL: "https://indexer.example/",
+      OPERATOR_MANIFEST_PATH: fixture.path,
+      OPERATOR_PRIVATE_KEY: privateKey,
+    });
+    const result = await provisionOperatorAccumulator(loaded, config, rpc, indexer);
+    assert.equal(result.status, "submitted");
+    const outputs = broadcast?.["outputs"] as Array<{ lock: { args: string } }>;
+    const witnesses = broadcast?.["witnesses"] as string[];
+    assert.equal(outputs[0]?.lock.args.length, 130);
+    assert.notEqual(witnesses[0], "0x");
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("operator builds a fallback claim from public chain and indexer state", async () => {
+  const fixture = await manifestFixture();
+  try {
+    const loaded = await loadOperatorManifest(fixture.path);
+    const privateKey = `0x${"1".repeat(64)}`;
+    const claim = fallbackClaimFixture(loaded.manifest, loaded.sha256, privateKey);
+    const sourceHash = hash("9");
+    const claimAccumulatorHash = hash("c");
+    const feeHash = hash("f");
+    const prepareWitness = DaoHarvestWitnessV2.pack({
+      version: 2,
+      operation: 1,
+      flags: 0,
+      job_input_index: 0,
+      vault_input_index: 1,
+      compensation_input_index: 2,
+      identity_input_index: 3,
+      prepare_accumulator_input_index: 3,
+      claim_accumulator_input_index: DAO_HARVEST_V2_ABSENT_INDEX,
+      job_output_index: 0,
+      vault_output_index: 1,
+      compensation_output_index: 2,
+      prepare_accumulator_output_index: 3,
+      claim_accumulator_output_index: DAO_HARVEST_V2_ABSENT_INDEX,
+      payload_hash: [
+        ...deriveDaoHarvestV2PayloadHash(
+          bytes(scriptToHash(claim.policyScript) as Hash32),
+          claim.payload,
+        ),
+      ],
+      progress_hash: [...deriveDaoHarvestV2ProgressHash(claim.progress)],
+      prepare_credit_hash: [...deriveDaoHarvestV2PrepareCreditHash(claim.credit)],
+    });
+    const prepareEnvelope = DaoHarvestEnvelopeV2.pack({
+      payload: [...claim.payload],
+      progress: [...claim.progress],
+      prepare_credit: [...claim.credit],
+      operator_proof: [],
+      successor_payload: [],
+    });
+    const vaultData = new Uint8Array(8);
+    new DataView(vaultData.buffer).setBigUint64(0, 10n, true);
+    const sourceCells = [
+      {
+        capacity: "0x4a817c800",
+        lock: {
+          code_hash: loaded.manifest.contracts.jobLock.codeHash,
+          hash_type: "data1",
+          args: "0x",
+        },
+        type: {
+          code_hash: claim.policyScript.codeHash,
+          hash_type: claim.policyScript.hashType,
+          args: claim.policyScript.args,
+        },
+        data: bytesToHex(claim.jobData),
+      },
+      {
+        capacity: `0x${DAO_HARVEST_VAULT_OCCUPIED_CAPACITY.toString(16)}`,
+        lock: {
+          code_hash: loaded.manifest.contracts.vaultLock.codeHash,
+          hash_type: "data1",
+          args: "0x",
+        },
+        type: { code_hash: loaded.manifest.nervosDao.codeHash, hash_type: "type", args: "0x" },
+        data: bytesToHex(vaultData),
+      },
+      {
+        capacity: "0x4a817c800",
+        lock: {
+          code_hash: loaded.manifest.contracts.compensationLock.codeHash,
+          hash_type: "data1",
+          args: `0x${"1".repeat(320)}`,
+        },
+        type: null,
+        data: "0x",
+      },
+      {
+        capacity: "0x4a817c800",
+        lock: {
+          code_hash: claim.preparer.codeHash,
+          hash_type: claim.preparer.hashType,
+          args: claim.preparer.args,
+        },
+        type: null,
+        data: "0x",
+      },
+    ];
+    const plainCells = new Map([
+      [claimAccumulatorHash, { capacity: "0x4a817c800", lock: claim.claimant }],
+      [feeHash, { capacity: "0x2540be400", lock: claim.operatorOwner }],
+    ]);
+    const rpc = new RpcFixture({
+      get_live_cell: (params: readonly unknown[]) => {
+        const point = params[0] as { tx_hash: string; index: string };
+        const source =
+          point.tx_hash === sourceHash
+            ? sourceCells[Number(BigInt(point.index))]
+            : plainCells.get(parseHash32(point.tx_hash));
+        assert.ok(source);
+        const lock = source.lock as ScriptIdentity;
+        return {
+          status: "live",
+          cell: {
+            output: {
+              capacity: source.capacity,
+              lock: {
+                code_hash: lock.codeHash ?? (source.lock as { code_hash: string }).code_hash,
+                hash_type: lock.hashType ?? (source.lock as { hash_type: string }).hash_type,
+                args: lock.args,
+              },
+              type: "type" in source ? source.type : null,
+            },
+            data: { content: "data" in source ? source.data : "0x" },
+          },
+        };
+      },
+      get_transaction: {
+        tx_status: { status: "committed", block_hash: hash("e") },
+        transaction: {
+          witnesses: [
+            serializeWitnessArgs({
+              lock: "",
+              inputType: bytesToHex(prepareWitness),
+              outputType: bytesToHex(prepareEnvelope),
+            }),
+          ],
+        },
+      },
+      get_header: { number: "0x14" },
+      get_block_by_number: (params: readonly unknown[]) => ({
+        header: {
+          hash: BigInt(params[0] as string) === 10n ? hash("a") : hash("b"),
+          dao: { c: "0", ar: "100", s: "0", u: "0" },
+        },
+      }),
+      get_tip_header: { epoch: `0x${packEpoch(epoch(102)).toString(16)}` },
+    });
+    const indexer = new RpcFixture({
+      get_cells: (params: readonly unknown[]) => {
+        const search = params[0] as { script: { code_hash: string } };
+        return {
+          objects: [
+            {
+              out_point: {
+                tx_hash:
+                  search.script.code_hash === loaded.manifest.contracts.compensationLock.codeHash
+                    ? claimAccumulatorHash
+                    : feeHash,
+                index: "0x0",
+              },
+            },
+          ],
+        };
+      },
+    });
+    const config = parseOperatorConfiguration({
+      CKB_RPC_URL: "https://rpc.example/",
+      CKB_INDEXER_URL: "https://indexer.example/",
+      OPERATOR_MANIFEST_PATH: fixture.path,
+      OPERATOR_PRIVATE_KEY: privateKey,
+    });
+    const bundle = await buildFallbackClaimBundle(
+      { txHash: sourceHash, index: parseOutputIndex(0n) },
+      loaded,
+      config,
+      rpc,
+      indexer,
+    );
+    assert.equal(bundle.operation, "fallback_claim");
+    assert.equal(bundle.jobId, claim.bundle.jobId);
+    const decoded = DaoHarvestWitnessV2.unpack(
+      witnessInputType(bundle.transaction.witnesses[0] as `0x${string}`),
+    );
+    assert.equal(Number(decoded.operation), DAO_HARVEST_V2_OPERATIONS.FALLBACK_CLAIM);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

@@ -12,3 +12,4 @@ fuzz/corpus/
 .env.*
 !.env.example
 !**/.env.example
+deploy/operator/operator.env

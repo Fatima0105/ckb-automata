@@ -10,6 +10,7 @@ export interface OperatorConfiguration {
   readonly privateKey?: string;
   readonly minimumProfitMargin: bigint;
   readonly feeRatePerKilobyte: bigint;
+  readonly transactionFee: bigint;
   readonly confirmationDepth: bigint;
   readonly healthPort: number;
   readonly expectedGenesisHash?: string;
@@ -52,6 +53,14 @@ export function parseOperatorConfiguration(
   }
   const manifestPath = input["OPERATOR_MANIFEST_PATH"];
   if (!manifestPath) throw new Error("OPERATOR_MANIFEST_PATH is required");
+  const transactionFee = decimal(
+    input["OPERATOR_TRANSACTION_FEE"],
+    50_000n,
+    "OPERATOR_TRANSACTION_FEE",
+  );
+  if (transactionFee < 1n || transactionFee > 50_000n) {
+    throw new Error("OPERATOR_TRANSACTION_FEE must be between 1 and 50000 shannons");
+  }
   return Object.freeze({
     rpcUrl: url(input["CKB_RPC_URL"], "CKB_RPC_URL"),
     indexerUrl: url(input["CKB_INDEXER_URL"], "CKB_INDEXER_URL"),
@@ -67,6 +76,7 @@ export function parseOperatorConfiguration(
       1_000n,
       "OPERATOR_FEE_RATE_PER_KILOBYTE",
     ),
+    transactionFee,
     confirmationDepth: decimal(
       input["OPERATOR_CONFIRMATION_DEPTH"],
       5n,
@@ -85,6 +95,7 @@ export function publicOperatorConfiguration(config: OperatorConfiguration) {
     signingKeyConfigured: config.privateKey !== undefined,
     minimumProfitMargin: config.minimumProfitMargin.toString(),
     feeRatePerKilobyte: config.feeRatePerKilobyte.toString(),
+    transactionFee: config.transactionFee.toString(),
     confirmationDepth: config.confirmationDepth.toString(),
     healthPort: config.healthPort,
     expectedGenesisHash: config.expectedGenesisHash ?? null,

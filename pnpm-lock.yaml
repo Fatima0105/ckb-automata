@@ -305,6 +305,9 @@ importers:
 
   apps/operator:
     dependencies:
+      '@ckb-automata/ccc':
+        specifier: workspace:*
+        version: link:../../packages/ccc
       '@ckb-automata/core':
         specifier: workspace:*
         version: link:../../packages/core

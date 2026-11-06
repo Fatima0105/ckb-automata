@@ -5,7 +5,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/operator.Dockerfile
-    image: ckautomata/operator:0.1.0
+    image: ckautomata/operator:0.2.0
     command: ["serve"]
     env_file:
       - operator.env

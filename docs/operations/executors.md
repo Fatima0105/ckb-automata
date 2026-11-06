@@ -13,6 +13,18 @@ Each instance derives its own Redis queue namespace from `EXECUTOR_INSTANCE_ID`.
 therefore observe eligible jobs independently; PostgreSQL claim guards and CKB input contention
 select one canonical winner without making either process a prerequisite for the other.
 
+## Independent DAO Harvest operator
+
+DAO Harvest V2 fallback claims can also be built and submitted by an operator that has no access
+to the hosted services. The standalone package uses only public CKB RPC/indexer data, verifies the
+audited deployment manifest, provisions the operator's on-chain reward accumulator, builds the
+claim, signs its fee cell, dry-runs it, and submits it. See the
+[external operator runbook](../../apps/operator/README.md) for the clean-machine and Docker flows.
+
+The standalone release does not make an outside operator an approved prepare operator. Preparation
+authority is committed by each job; the public workflow begins only when a prepared job reaches its
+fallback claim window.
+
 ## Wallet limits
 
 - Fund each operator with 500 testnet CKB and keep it below the 1,000 CKB operational cap.

@@ -105,7 +105,9 @@ const commonFields = {
     z
       .string()
       .max(64)
-      .regex(/^(?:deadline|recurring|dao-harvest)(?:,(?:deadline|recurring|dao-harvest)){0,2}$/)
+      .regex(
+        /^(?:deadline|recurring|dao-harvest|dao-harvest-v2)(?:,(?:deadline|recurring|dao-harvest|dao-harvest-v2)){0,3}$/,
+      )
       .refine((value) => new Set(value.split(",")).size === value.split(",").length, {
         message: "supported executor policies must be unique",
       })

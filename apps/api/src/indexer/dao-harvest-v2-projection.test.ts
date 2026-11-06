@@ -8,6 +8,7 @@ import {
   createEpoch,
   deriveDaoHarvestV2FallbackOperatorSetHash,
   deriveDaoHarvestV2PayloadHash,
+  deriveDaoHarvestV2PrepareCreditHash,
   deriveDaoHarvestV2ProgressHash,
   encodeAbsoluteEpochSince,
   encodeDaoHarvestV2CompensationLockArgs,
@@ -22,6 +23,7 @@ import {
 import {
   DaoHarvestEnvelopeV2,
   DaoHarvestPayloadV2,
+  DaoHarvestPrepareCreditV2,
   DaoHarvestProgressV2,
   DaoHarvestWitnessV2,
   JobDataV1,
@@ -181,6 +183,12 @@ function setupBlock() {
       transactions: [transaction],
     },
     txHash,
+    payload,
+    payloadHash,
+    progress,
+    progressHash,
+    job,
+    vaultArgs,
   };
 }
 
@@ -200,6 +208,88 @@ test("extracts a fully bound V2 setup projection from chain bytes", () => {
   assert.equal(event.operatorWindow?.preferredFromSince, absoluteSince(100n));
   assert.equal(event.operatorWindow?.fallbackFromSince, absoluteSince(104n));
   assert.equal(event.operatorWindow?.prepareCutoffSince, absoluteSince(109n));
+});
+
+test("prepare projection derives the withdrawing successor from input progress", () => {
+  const setup = setupBlock();
+  const credit = DaoHarvestPrepareCreditV2.pack({
+    version: 2,
+    job_id: [...hash32ToBytes(jobId)],
+    cycle_index: 0,
+    preparer_lock_hash: [...hash32ToBytes(hash("5"))],
+    prepared_vault_output_index: 1,
+    job_output_index: 0,
+  });
+  const creditHash = hash32FromBytes(deriveDaoHarvestV2PrepareCreditHash(credit));
+  const successorProgress = DaoHarvestProgressV2.pack({
+    version: 2,
+    state: 1,
+    cycle_index: 0,
+    prepare_credit_hash: [...hash32ToBytes(creditHash)],
+  });
+  const successorJob = JobDataV1.pack({
+    ...JobDataV1.unpack(setup.job),
+    sequence: "1",
+    trigger_params_hash: [...deriveDaoHarvestV2ProgressHash(successorProgress)],
+    not_before: absoluteSince(180n),
+  });
+  const request = DaoHarvestWitnessV2.pack({
+    version: 2,
+    operation: 1,
+    flags: 0,
+    job_input_index: 0,
+    vault_input_index: 1,
+    compensation_input_index: DAO_HARVEST_V2_ABSENT_INDEX,
+    identity_input_index: 2,
+    prepare_accumulator_input_index: DAO_HARVEST_V2_ABSENT_INDEX,
+    claim_accumulator_input_index: DAO_HARVEST_V2_ABSENT_INDEX,
+    job_output_index: 0,
+    vault_output_index: 1,
+    compensation_output_index: DAO_HARVEST_V2_ABSENT_INDEX,
+    prepare_accumulator_output_index: DAO_HARVEST_V2_ABSENT_INDEX,
+    claim_accumulator_output_index: DAO_HARVEST_V2_ABSENT_INDEX,
+    payload_hash: [...hash32ToBytes(setup.payloadHash)],
+    progress_hash: [...hash32ToBytes(setup.progressHash)],
+    prepare_credit_hash: [...hash32ToBytes(creditHash)],
+  });
+  const envelope = DaoHarvestEnvelopeV2.pack({
+    payload: [...setup.payload],
+    progress: [...setup.progress],
+    prepare_credit: [...credit],
+    operator_proof: [],
+    successor_payload: [],
+  });
+  const transaction = {
+    hash: () => hash("8"),
+    inputs: [
+      { previousOutput: { txHash: setup.txHash, index: "0x0" } },
+      { previousOutput: { txHash: setup.txHash, index: "0x1" } },
+      { previousOutput: { txHash: hash("6"), index: "0x0" } },
+    ],
+    outputs: [
+      { capacity: "0x64", lock: { ...deployment.jobLock, args: "0x" }, type: policy },
+      {
+        capacity: "0x3e8",
+        lock: { ...deployment.vaultLock, args: bytesToHex(setup.vaultArgs) },
+        type: daoType,
+      },
+      { capacity: "0x64", lock: script("5"), type: undefined },
+    ],
+    outputsData: [bytesToHex(successorJob), "0x2a00000000000000", "0x"],
+    witnesses: [
+      serializeWitnessArgs({
+        lock: "",
+        inputType: bytesToHex(request),
+        outputType: bytesToHex(envelope),
+      }),
+    ],
+  };
+  const block = { header: { hash: hash("9"), number: "0x65" }, transactions: [transaction] };
+  const result = extractDaoHarvestV2ProjectionEvents(block as never, deployment);
+  assert.equal(result.malformed, 0);
+  assert.equal(result.events[0]?.lifecycleState, "withdrawing");
+  assert.equal(result.events[0]?.prepareCredit?.preparerLockHash, hash("5"));
+  assert.equal(result.events[0]?.operatorWindow?.preferredFromSince, absoluteSince(180n));
 });
 
 test("canonical V2 indexing resolves input evidence before storing a setup", async () => {

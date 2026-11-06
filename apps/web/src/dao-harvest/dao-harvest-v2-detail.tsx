@@ -97,6 +97,7 @@ function HarvestV2OwnerAction({
   const copy = ACTION_COPY[operation];
   const [preferredAddress, setPreferredAddress] = useState("");
   const [backupAddress, setBackupAddress] = useState("");
+  const [payoutAddress, setPayoutAddress] = useState("");
   const [state, setState] = useState<
     | { readonly status: "idle" | "loading" | "submitting" }
     | { readonly status: "error"; readonly message: string }
@@ -106,18 +107,27 @@ function HarvestV2OwnerAction({
 
   const requestBody = async (): Promise<Record<string, unknown>> => {
     if (session.ownerLockHash !== job.ownerLockHash) throw new Error("Reconnect the owner wallet.");
-    const ownerLock = await session.getOwnerLock(job.ownerLockHash);
-    if (operation !== "rotate") return { jobId: job.jobId, ownerLock };
+    const [ownerLock, identityOutPoint] = await Promise.all([
+      session.getOwnerLock(job.ownerLockHash),
+      session.selectDeadlinePledge(),
+    ]);
+    if (operation === "sweep" || operation === "close") {
+      const payoutLock =
+        job.payoutLockHash === job.ownerLockHash
+          ? ownerLock
+          : await session.resolveLock(payoutAddress);
+      return { jobId: job.jobId, identityOutPoint, ownerLock, payoutLock };
+    }
+    if (operation !== "rotate") return { jobId: job.jobId, identityOutPoint, ownerLock };
     const [preferredOperatorLock, backupOperatorLock] = await Promise.all([
       session.resolveLock(preferredAddress),
       session.resolveLock(backupAddress),
     ]);
     return {
       jobId: job.jobId,
+      identityOutPoint,
       ownerLock,
-      preferredOperatorLock,
       preferredOperatorLockHash: session.reviewLockHash(preferredOperatorLock),
-      backupOperatorLocks: [backupOperatorLock],
       backupOperatorLockHashes: [session.reviewLockHash(backupOperatorLock)],
     };
   };
@@ -199,9 +209,26 @@ function HarvestV2OwnerAction({
             />
           </div>
         ) : null}
+        {(operation === "sweep" || operation === "close") &&
+        job.payoutLockHash !== job.ownerLockHash &&
+        state.status === "idle" ? (
+          <TextField
+            autoComplete="off"
+            hint="Enter the payout address saved when this automation was created."
+            label="Payout address"
+            onChange={(event) => setPayoutAddress(event.target.value)}
+            required
+            value={payoutAddress}
+          />
+        ) : null}
         {state.status === "idle" ? (
           <Button
-            disabled={operation === "rotate" && (!preferredAddress.trim() || !backupAddress.trim())}
+            disabled={
+              (operation === "rotate" && (!preferredAddress.trim() || !backupAddress.trim())) ||
+              ((operation === "sweep" || operation === "close") &&
+                job.payoutLockHash !== job.ownerLockHash &&
+                !payoutAddress.trim())
+            }
             onClick={() => void prepare()}
           >
             {copy.button}

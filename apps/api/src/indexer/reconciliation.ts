@@ -3,7 +3,9 @@ import type { ClientBlock } from "@ckb-ccc/shell";
 import { parseBlockNumber, type RegisteredDeployment } from "@ckb-automata/core";
 
 import type { CkbReadClient } from "../ckb-client.ts";
+import type { DaoHarvestV2Deployment } from "../dao-harvest-v2-adapter.ts";
 import type { CanonicalCheckpointStore } from "./checkpoints.ts";
+import type { DaoHarvestV2BlockIndexer } from "./dao-harvest-v2-indexer.ts";
 import type { JobCellDiscovery } from "./job-discovery.ts";
 import type { JobTransitionIndexer } from "./job-transitions.ts";
 
@@ -21,6 +23,10 @@ interface LiveJobReconcilerOptions {
   readonly enabled: boolean;
   readonly loadDeployment: () => Promise<RegisteredDeployment>;
   readonly pollIntervalMs?: number;
+  readonly daoHarvestV2?: {
+    readonly deployment: DaoHarvestV2Deployment;
+    readonly indexer: Pick<DaoHarvestV2BlockIndexer, "projectBlock">;
+  };
 }
 
 type ReconciliationChainClient = Pick<
@@ -54,7 +60,7 @@ export class LiveJobReconciler {
   readonly #transitions: Pick<JobTransitionIndexer, "indexBlock">;
   readonly #logger: ReconciliationLogger;
   readonly #options: Required<Pick<LiveJobReconcilerOptions, "enabled" | "pollIntervalMs">> &
-    Pick<LiveJobReconcilerOptions, "loadDeployment">;
+    Pick<LiveJobReconcilerOptions, "loadDeployment" | "daoHarvestV2">;
   #lastScanned: bigint | undefined;
   #running = false;
   #stopped = true;
@@ -81,6 +87,7 @@ export class LiveJobReconciler {
       enabled: options.enabled,
       loadDeployment: options.loadDeployment,
       pollIntervalMs,
+      ...(options.daoHarvestV2 === undefined ? {} : { daoHarvestV2: options.daoHarvestV2 }),
     });
   }
 
@@ -141,28 +148,63 @@ export class LiveJobReconciler {
     }
 
     const blockNumbers = new Set<bigint>();
-    let cursor: string | undefined;
-    for (let pageNumber = 0; pageNumber < MAX_RECONCILIATION_PAGES; pageNumber += 1) {
-      const page = await this.#chain.findTransactionsPaged(
-        {
-          script: exactJobLock(deployment),
-          scriptType: "lock",
-          scriptSearchMode: "exact",
-          filter: { blockRange: [first, confirmedTip + 1n] },
-          groupByTransaction: true,
-        },
-        "asc",
-        RECONCILIATION_PAGE_SIZE,
-        cursor,
-      );
-      for (const transaction of page.transactions) {
-        blockNumbers.add(parseBlockNumber(transaction.blockNumber.toString()));
-      }
-      if (page.transactions.length < RECONCILIATION_PAGE_SIZE) break;
-      if (page.lastCursor === cursor) throw new Error("CKB indexer reconciliation cursor stalled");
-      cursor = page.lastCursor;
-      if (pageNumber === MAX_RECONCILIATION_PAGES - 1) {
-        throw new Error("CKB indexer reconciliation page limit exceeded");
+    const scripts = [
+      { script: exactJobLock(deployment), searchMode: "exact" as const },
+      ...(this.#options.daoHarvestV2 === undefined
+        ? []
+        : [
+            {
+              script: {
+                codeHash: this.#options.daoHarvestV2.deployment.contracts.jobLock.codeHash,
+                hashType: "data1" as const,
+                args: "0x" as const,
+              },
+              searchMode: "exact" as const,
+            },
+            {
+              script: {
+                codeHash: this.#options.daoHarvestV2.deployment.contracts.vaultLock.codeHash,
+                hashType: "data1" as const,
+                args: "0x" as const,
+              },
+              searchMode: "prefix" as const,
+            },
+            {
+              script: {
+                codeHash: this.#options.daoHarvestV2.deployment.contracts.compensationLock.codeHash,
+                hashType: "data1" as const,
+                args: "0x" as const,
+              },
+              searchMode: "prefix" as const,
+            },
+          ]),
+    ];
+    for (const { script, searchMode } of scripts) {
+      let cursor: string | undefined;
+      for (let pageNumber = 0; pageNumber < MAX_RECONCILIATION_PAGES; pageNumber += 1) {
+        const page = await this.#chain.findTransactionsPaged(
+          {
+            script,
+            scriptType: "lock",
+            scriptSearchMode: searchMode,
+            filter: { blockRange: [first, confirmedTip + 1n] },
+            groupByTransaction: true,
+          },
+          "asc",
+          RECONCILIATION_PAGE_SIZE,
+          cursor,
+        );
+        for (const transaction of page.transactions) {
+          blockNumbers.add(parseBlockNumber(transaction.blockNumber.toString()));
+        }
+        if (page.transactions.length < RECONCILIATION_PAGE_SIZE) break;
+        if (page.lastCursor === cursor) {
+          throw new Error("CKB indexer reconciliation cursor stalled");
+        }
+        cursor = page.lastCursor;
+        if (pageNumber === MAX_RECONCILIATION_PAGES - 1) {
+          throw new Error("CKB indexer reconciliation page limit exceeded");
+        }
       }
     }
 
@@ -195,6 +237,7 @@ export class LiveJobReconciler {
   async #project(block: ClientBlock, deployment: RegisteredDeployment): Promise<void> {
     await this.#discovery.projectBlock(block, deployment);
     await this.#transitions.indexBlock(block, deployment);
+    await this.#options.daoHarvestV2?.indexer.projectBlock(block);
   }
 
   #schedule(delayMs: number): void {

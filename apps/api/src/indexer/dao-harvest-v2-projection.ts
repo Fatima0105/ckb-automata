@@ -303,8 +303,8 @@ export function extractDaoHarvestV2ProjectionEvents(
       const progressBytes = Uint8Array.from(envelope.progress);
       const creditBytes = Uint8Array.from(envelope.prepare_credit);
       const payload = DaoHarvestPayloadV2.unpack(payloadBytes);
-      const progress = DaoHarvestProgressV2.unpack(progressBytes);
-      if (Number(payload.version) !== 2 || Number(progress.version) !== 2) {
+      const inputProgress = DaoHarvestProgressV2.unpack(progressBytes);
+      if (Number(payload.version) !== 2 || Number(inputProgress.version) !== 2) {
         throw new Error("unsupported V2 payload");
       }
       const policyScriptHash = parseHash32(scriptToHash(deployment.policy));
@@ -326,7 +326,10 @@ export function extractDaoHarvestV2ProjectionEvents(
           : hash32FromBytes(deriveDaoHarvestV2PrepareCreditHash(creditBytes));
       if (
         byteHash(witness.prepare_credit_hash) !== expectedCreditHash ||
-        byteHash(progress.prepare_credit_hash) !== expectedCreditHash
+        (![1, 2].includes(operationValue) &&
+          byteHash(inputProgress.prepare_credit_hash) !== expectedCreditHash) ||
+        ([1, 2].includes(operationValue) &&
+          byteHash(inputProgress.prepare_credit_hash) !== `0x${"00".repeat(32)}`)
       ) {
         throw new Error("V2 prepare credit mismatch");
       }
@@ -363,10 +366,29 @@ export function extractDaoHarvestV2ProjectionEvents(
       const job = jobCandidate
         ? JobDataV1.unpack(hexToBytes(transaction.outputsData[jobCandidate.outputIndex] ?? "0x"))
         : null;
+      const activeProgressBytes = [1, 2].includes(operationValue)
+        ? DaoHarvestProgressV2.pack({
+            version: 2,
+            state: 1,
+            cycle_index: inputProgress.cycle_index,
+            prepare_credit_hash: [...hexToBytes(expectedCreditHash)],
+          })
+        : [3, 4, 5].includes(operationValue) && job !== null
+          ? DaoHarvestProgressV2.pack({
+              version: 2,
+              state: 0,
+              cycle_index: Number(inputProgress.cycle_index) + 1,
+              prepare_credit_hash: Array(32).fill(0),
+            })
+          : progressBytes;
+      const activeProgress = DaoHarvestProgressV2.unpack(activeProgressBytes);
+      const activeProgressHash = hash32FromBytes(
+        deriveDaoHarvestV2ProgressHash(activeProgressBytes),
+      );
       if (
         job &&
         (byteHash(job.payload_hash) !== payloadHash ||
-          byteHash(job.trigger_params_hash) !== progressHash ||
+          byteHash(job.trigger_params_hash) !== activeProgressHash ||
           byteHash(job.policy_script_hash) !== policyScriptHash)
       ) {
         throw new Error("V2 Job commitment mismatch");
@@ -416,7 +438,7 @@ export function extractDaoHarvestV2ProjectionEvents(
 
       const vault = vaultCandidates[0];
       const compensation = compensationCandidates[0];
-      const state = Number(progress.state);
+      const state = Number(activeProgress.state);
       if (state !== 0 && state !== 1) throw new Error("invalid V2 progress state");
       const terminal = !job;
       const validState =
@@ -494,7 +516,7 @@ export function extractDaoHarvestV2ProjectionEvents(
           payoutLockHash: byteHash(activePayload.payout_lock_hash),
           principalCapacity: activePayload.principal_capacity.toString(),
           compensationSeedCapacity: seed.toString(),
-          cycleIndex: progress.cycle_index.toString(),
+          cycleIndex: activeProgress.cycle_index.toString(),
           totalCycles: activePayload.total_cycles.toString(),
           lifecycleState,
           jobOutPoint: jobOutput,

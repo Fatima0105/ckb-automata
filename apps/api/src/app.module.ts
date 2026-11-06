@@ -302,6 +302,8 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           CanonicalCheckpointStore,
           JobCellDiscovery,
           JobTransitionIndexer,
+          DAO_HARVEST_V2_INDEXER,
+          DAO_HARVEST_V2_DEPLOYMENT,
           BackendTelemetry,
         ],
         useFactory: (
@@ -309,6 +311,8 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           checkpoints: CanonicalCheckpointStore,
           discovery: JobCellDiscovery,
           transitions: JobTransitionIndexer,
+          daoHarvestV2: DaoHarvestV2BlockIndexer | undefined,
+          daoHarvestV2Deployment: VerifiedDaoHarvestV2Deployment | undefined,
           telemetry: BackendTelemetry,
         ) =>
           new LiveJobReconciler(ckbClient, checkpoints, discovery, transitions, telemetry.logger, {
@@ -320,6 +324,14 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
               }
               return result.deployment;
             },
+            ...(daoHarvestV2 === undefined || daoHarvestV2Deployment === undefined
+              ? {}
+              : {
+                  daoHarvestV2: {
+                    deployment: daoHarvestV2Deployment.deployment,
+                    indexer: daoHarvestV2,
+                  },
+                }),
           }),
       },
       {

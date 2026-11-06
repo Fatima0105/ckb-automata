@@ -3,6 +3,7 @@ import { parseShannons, type IntegerInput, type Shannons } from "./chain-values.
 const SHANNONS_PER_CKB = 100_000_000n;
 
 export const HARVEST_V2_COMPENSATION_LOCK_ARGS_BYTES = 160;
+export const HARVEST_V2_OPERATOR_ACCUMULATOR_LOCK_ARGS_BYTES = 64;
 
 export function prototypePlainCellOccupiedCapacity(lockArgsBytes: number): Shannons {
   if (!Number.isSafeInteger(lockArgsBytes) || lockArgsBytes < 0) {
@@ -94,7 +95,7 @@ export interface OperatorAccumulatorPrototype {
 export function prototypeOperatorAccumulator(
   inputCapacity: IntegerInput,
   payment: IntegerInput,
-  operatorLockArgsBytes = 20,
+  operatorLockArgsBytes = HARVEST_V2_OPERATOR_ACCUMULATOR_LOCK_ARGS_BYTES,
 ): OperatorAccumulatorPrototype {
   const occupied = prototypePlainCellOccupiedCapacity(operatorLockArgsBytes);
   const before = parseShannons(inputCapacity);

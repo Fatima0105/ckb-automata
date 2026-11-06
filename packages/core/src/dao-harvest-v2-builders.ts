@@ -81,6 +81,7 @@ export interface DaoHarvestV2BuilderInput {
   readonly cellDeps: readonly CellDepIdentity[];
   readonly headerDeps: readonly Hash32[];
   readonly inputs: readonly UnsignedCellInput[];
+  readonly additionalWitnesses?: readonly Hex[];
   readonly inputCapacities: readonly IntegerInput[];
   readonly outputs: readonly UnsignedCellOutput[];
   readonly outputsData: readonly Hex[];
@@ -162,6 +163,9 @@ function assertLengths(input: DaoHarvestV2BuilderInput): void {
   }
   if (input.outputs.length !== input.outputsData.length) {
     throw new RangeError("reviewed outputs and output data lengths differ");
+  }
+  if ((input.additionalWitnesses?.length ?? 0) > Math.max(0, input.inputs.length - 1)) {
+    throw new RangeError("additional witnesses exceed reviewed inputs");
   }
   for (const [name, index] of Object.entries(input.indices)) {
     if (index === DAO_HARVEST_V2_ABSENT_INDEX) continue;
@@ -277,6 +281,7 @@ export function buildDaoHarvestV2Transaction(input: DaoHarvestV2BuilderInput): D
         inputType: bytesToHex(witness),
         outputType: bytesToHex(envelope),
       }) as Hex,
+      ...(input.additionalWitnesses ?? []),
     ]),
   });
   const review = freezeReview(input.economics);

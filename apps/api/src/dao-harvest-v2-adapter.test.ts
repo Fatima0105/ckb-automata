@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { scriptToHash } from "@nervosnetwork/ckb-sdk-utils";
+import { bytesToHex, hexToBytes, scriptToHash } from "@nervosnetwork/ckb-sdk-utils";
+import { JobDataV1 } from "@ckb-automata/molecule";
 
 import {
   parseHash32,
+  decodeDaoHarvestV2CompensationLockArgs,
+  encodeDaoHarvestV2CompensationLockArgs,
   type CellDepIdentity,
   type ScriptIdentity,
   type UnsignedDeadlineTransaction,
@@ -130,7 +133,166 @@ test("V2 setup rejects stale identity cells, wrong owners, weak principal, and e
     adapter.build("setup", request({ ownerLockHash: payoutLockHash })),
     /reviewed hashes/,
   );
-  await assert.rejects(adapter.build("sweep", {}), /after the harvest automation is indexed/);
+  await assert.rejects(adapter.build("sweep", {}), /owner actions are not configured/);
+});
+
+function ownerActionFixture() {
+  const transactionHash = hash("f");
+  const identity = outPoint("e");
+  let build: Awaited<ReturnType<DaoHarvestV2TransactionAdapter["build"]>>;
+  const row = {
+    networkId: "ckb_testnet",
+    jobId: hash("0"),
+    ownerLockHash,
+    payoutLockHash,
+    lifecycleState: "deposited",
+    jobOutpoint: { txHash: transactionHash, index: "0" },
+    vaultOutpoint: { txHash: transactionHash, index: "1" },
+    compensationOutpoint: { txHash: transactionHash, index: "2" },
+    observedTransactionHash: transactionHash,
+    canonical: true,
+  };
+  const database = {
+    select: () => ({
+      from: () => ({
+        where: () => ({ limit: async () => [row] }),
+      }),
+    }),
+  } as never;
+  const adapter = new DaoHarvestV2TransactionAdapter(
+    {
+      getTipHeader: chain().getTipHeader,
+      getTransactionStatus: async () =>
+        ({
+          status: "committed",
+          transaction: build.transaction,
+        }) as never,
+      getCellLive: async (point: { txHash: string; index: bigint | string }) => {
+        const index = globalThis.BigInt(String(point.index));
+        if (point.txHash === identity.txHash) return chain().getCellLive();
+        if (point.txHash !== transactionHash) return undefined;
+        const transaction = build.transaction as UnsignedDeadlineTransaction;
+        const candidate = transaction.outputs[Number(index)];
+        if (!candidate) return undefined;
+        const lock =
+          index === 2n && row.lifecycleState === "completed"
+            ? {
+                ...candidate.lock,
+                args: bytesToHex(
+                  encodeDaoHarvestV2CompensationLockArgs({
+                    ...decodeDaoHarvestV2CompensationLockArgs(hexToBytes(candidate.lock.args)),
+                    jobId: new Uint8Array(32),
+                  }),
+                ),
+              }
+            : candidate.lock;
+        return {
+          cellOutput: {
+            capacity: index === 2n ? 301n * 100_000_000n : BigInt(candidate.capacity),
+            lock,
+            ...(candidate.type === null ? {} : { type: candidate.type }),
+          },
+          outputData: {
+            toString: () => transaction.outputsData[Number(index)]!,
+          },
+        } as never;
+      },
+    },
+    deployment,
+    database,
+    "ckb_testnet",
+  );
+  return {
+    adapter,
+    identity,
+    row,
+    initialize: async () => {
+      build = await new DaoHarvestV2TransactionAdapter(chain(), deployment).build(
+        "setup",
+        request(),
+      );
+      row.jobId = parseHash32(build.jobId);
+      return build;
+    },
+  };
+}
+
+test("V2 owner sweep preserves the job and reserve while paying only accumulated compensation", async () => {
+  const fixture = ownerActionFixture();
+  const setup = await fixture.initialize();
+  const result = await fixture.adapter.build("sweep", {
+    jobId: setup.jobId,
+    identityOutPoint: fixture.identity,
+    ownerLock: owner,
+    payoutLock: payout,
+  });
+  const transaction = result.transaction as UnsignedDeadlineTransaction;
+  assert.equal(result.operation, "sweep");
+  assert.equal(transaction.inputs.length, 3);
+  assert.equal(transaction.outputs.length, 3);
+  assert.equal(BigInt(transaction.outputs[1]!.capacity), 201n * 100_000_000n);
+  assert.equal(BigInt(transaction.outputs[2]!.capacity), 100n * 100_000_000n);
+  assert.equal(scriptToHash(transaction.outputs[2]!.lock), payoutLockHash);
+  assert.equal(result.review.accumulatedCompensation, (100n * 100_000_000n).toString());
+});
+
+test("V2 owner rotation changes only operator commitments and compensation payload binding", async () => {
+  const fixture = ownerActionFixture();
+  const setup = await fixture.initialize();
+  const result = await fixture.adapter.build("rotate", {
+    jobId: setup.jobId,
+    identityOutPoint: fixture.identity,
+    ownerLock: owner,
+    preferredOperatorLockHash: hash("6"),
+    backupOperatorLockHashes: [hash("7")],
+  });
+  const transaction = result.transaction as UnsignedDeadlineTransaction;
+  assert.equal(result.operation, "rotate");
+  assert.equal(transaction.inputs.length, 3);
+  assert.equal(transaction.outputs.length, 2);
+  assert.equal(transaction.outputsData[1], "0x");
+  const successorJob = JobDataV1.unpack(Buffer.from(transaction.outputsData[0]!.slice(2), "hex"));
+  assert.notEqual(
+    Buffer.from(successorJob.payload_hash).toString("hex"),
+    setup.payloadHash.slice(2),
+  );
+  assert.equal(BigInt(transaction.outputs[1]!.capacity), 301n * 100_000_000n);
+});
+
+test("V2 deposited-state recovery returns job, principal, and compensation to the owner", async () => {
+  const fixture = ownerActionFixture();
+  const setup = await fixture.initialize();
+  const result = await fixture.adapter.build("recover", {
+    jobId: setup.jobId,
+    identityOutPoint: fixture.identity,
+    ownerLock: owner,
+  });
+  const transaction = result.transaction as UnsignedDeadlineTransaction;
+  assert.equal(result.operation, "recover");
+  assert.equal(transaction.inputs.length, 4);
+  assert.equal(transaction.outputs.length, 1);
+  assert.equal(BigInt(transaction.outputs[0]!.capacity), 943n * 100_000_000n);
+  assert.equal(scriptToHash(transaction.outputs[0]!.lock), ownerLockHash);
+});
+
+test("V2 close spends only a terminal compensation cell and pays the committed payout", async () => {
+  const fixture = ownerActionFixture();
+  const setup = await fixture.initialize();
+  fixture.row.lifecycleState = "completed";
+  fixture.row.jobOutpoint = null as never;
+  fixture.row.vaultOutpoint = null as never;
+  const result = await fixture.adapter.build("close", {
+    jobId: setup.jobId,
+    identityOutPoint: fixture.identity,
+    ownerLock: owner,
+    payoutLock: payout,
+  });
+  const transaction = result.transaction as UnsignedDeadlineTransaction;
+  assert.equal(result.operation, "close");
+  assert.equal(transaction.inputs.length, 2);
+  assert.equal(transaction.outputs.length, 1);
+  assert.equal(BigInt(transaction.outputs[0]!.capacity), 301n * 100_000_000n);
+  assert.equal(scriptToHash(transaction.outputs[0]!.lock), payoutLockHash);
 });
 
 test("V2 setup registration accepts only a chain-known setup and stores a pending marker", async () => {

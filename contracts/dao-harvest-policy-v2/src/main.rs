@@ -352,9 +352,10 @@ fn validate_prepare(job: &JobDataV1, context: &HarvestContext) -> Result<(), Scr
     let identity_index = index(context.witness.identity_input_index())?;
     let identity = load_cell_lock_hash(identity_index, Source::Input)
         .map_err(|_| ScriptError::UnauthorizedExecutor)?;
+    let operator = prepare_operator_owner(identity_index, context)?;
     let operation = operation(&context.witness);
     if operation == PREFERRED_PREPARE_OPERATION {
-        if identity.as_slice()
+        if operator.as_slice()
             != context
                 .payload
                 .preferred_prepare_operator_lock_hash()
@@ -371,7 +372,7 @@ fn validate_prepare(job: &JobDataV1, context: &HarvestContext) -> Result<(), Scr
         }
     } else {
         let operators = validate_fallback_proof(context)?;
-        if !operators.contains(&identity) {
+        if !operators.contains(&operator) {
             return Err(ScriptError::UnauthorizedExecutor);
         }
         let actual = load_input_since(index(context.witness.job_input_index())?, Source::Input)
@@ -433,6 +434,32 @@ fn validate_prepare(job: &JobDataV1, context: &HarvestContext) -> Result<(), Scr
         progress_hash(successor_progress.as_slice()).ok_or(ScriptError::ArithmeticOverflow)?,
         SuccessorTiming::Advance,
     )
+}
+
+fn prepare_operator_owner(
+    identity_index: usize,
+    context: &HarvestContext,
+) -> Result<[u8; 32], ScriptError> {
+    let lock = load_cell_lock(identity_index, Source::Input)
+        .map_err(|_| ScriptError::InvalidOperatorAccumulator)?;
+    let args = lock.args().raw_data();
+    let policy_hash = load_script_hash().map_err(|_| ScriptError::PolicyHashMismatch)?;
+    if lock.code_hash().as_slice() != context.payload.compensation_lock_code_hash().as_slice()
+        || lock.hash_type().as_slice() != [2]
+        || args.len() != 64
+        || args[32..] != policy_hash
+        || load_cell_type_hash(identity_index, Source::Input)
+            .map_err(|_| ScriptError::InvalidOperatorAccumulator)?
+            .is_some()
+        || !load_cell_data(identity_index, Source::Input)
+            .map_err(|_| ScriptError::InvalidOperatorAccumulator)?
+            .is_empty()
+    {
+        return Err(ScriptError::InvalidOperatorAccumulator);
+    }
+    args[..32]
+        .try_into()
+        .map_err(|_| ScriptError::InvalidOperatorAccumulator)
 }
 
 fn validate_prepare_credit(
@@ -960,19 +987,34 @@ fn validate_recovery(job: &JobDataV1, context: &HarvestContext) -> Result<(), Sc
         let gross = vault_value
             .checked_sub(read_u64(context.payload.principal_capacity().as_slice()))
             .ok_or(ScriptError::PrincipalMismatch)?;
-        let payment = gross.min(read_u64(context.payload.prepare_service_fee().as_slice()));
-        let preparer: [u8; 32] = credit
-            .preparer_lock_hash()
-            .as_slice()
-            .try_into()
-            .map_err(|_| ScriptError::InvalidPrepareCredit)?;
-        validate_accumulator(
-            index(context.witness.prepare_accumulator_input_index())?,
-            index(context.witness.prepare_accumulator_output_index())?,
-            &preparer,
-            payment,
-        )?;
-        payment
+        let accumulator_input =
+            read_u32(context.witness.prepare_accumulator_input_index().as_slice());
+        let accumulator_output = read_u32(
+            context
+                .witness
+                .prepare_accumulator_output_index()
+                .as_slice(),
+        );
+        if accumulator_input == ABSENT_INDEX && accumulator_output == ABSENT_INDEX {
+            0
+        } else {
+            if accumulator_input == ABSENT_INDEX || accumulator_output == ABSENT_INDEX {
+                return Err(ScriptError::InvalidOperatorAccumulator);
+            }
+            let payment = gross.min(read_u64(context.payload.prepare_service_fee().as_slice()));
+            let preparer: [u8; 32] = credit
+                .preparer_lock_hash()
+                .as_slice()
+                .try_into()
+                .map_err(|_| ScriptError::InvalidPrepareCredit)?;
+            validate_accumulator(
+                accumulator_input as usize,
+                accumulator_output as usize,
+                &preparer,
+                payment,
+            )?;
+            payment
+        }
     } else {
         if read_u32(context.witness.prepare_accumulator_input_index().as_slice()) != ABSENT_INDEX
             || read_u32(

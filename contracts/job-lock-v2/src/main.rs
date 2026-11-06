@@ -5,8 +5,8 @@ use ckb_std::{
     ckb_constants::Source,
     default_alloc, entry,
     high_level::{
-        QueryIter, load_cell_data, load_cell_lock_hash, load_cell_type_hash, load_input,
-        load_script_hash, load_witness_args,
+        QueryIter, load_cell_data, load_cell_lock, load_cell_lock_hash, load_cell_type_hash,
+        load_input, load_script_hash, load_witness_args,
     },
 };
 use molecule::prelude::Entity;
@@ -198,7 +198,21 @@ fn validate_identity(
         | CLOSE_OPERATION
         | ROTATE_OPERATION
         | RECOVER_OPERATION => owner.as_slice(),
-        PREFERRED_PREPARE_OPERATION => preferred.as_slice(),
+        PREFERRED_PREPARE_OPERATION => {
+            let lock = load_cell_lock(identity_index, Source::Input)
+                .map_err(|_| ScriptError::InvalidOperatorAccumulator)?;
+            let args = lock.args().raw_data();
+            if lock.code_hash().as_slice() != payload.compensation_lock_code_hash().as_slice()
+                || lock.hash_type().as_slice() != [2]
+                || args.len() != 64
+            {
+                return Err(ScriptError::InvalidOperatorAccumulator);
+            }
+            if args[..32] != preferred.as_slice()[..] {
+                return Err(ScriptError::UnauthorizedPreferredOperator);
+            }
+            return Ok(());
+        }
         FALLBACK_PREPARE_OPERATION | PREFERRED_CLAIM_OPERATION | FALLBACK_CLAIM_OPERATION => {
             return Ok(());
         }

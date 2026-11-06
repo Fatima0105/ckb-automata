@@ -85,8 +85,8 @@ test("owner completion waives claim payment and accumulates the remainder", () =
   assert.equal(result.compensationCellAfter, seed + 30n * CKB);
 });
 
-test("same-lock accumulator accepts payments that would make dust direct payouts", () => {
-  const occupied = prototypePlainCellOccupiedCapacity(20);
+test("policy-bound accumulator accepts payments that would make dust direct payouts", () => {
+  const occupied = prototypePlainCellOccupiedCapacity(64);
   const small = prototypeOperatorAccumulator(occupied + 5n * CKB, 1n * CKB);
   assert.equal(small.outputCapacity, occupied + 6n * CKB);
   assert.equal(small.directPayoutIsDust, true);

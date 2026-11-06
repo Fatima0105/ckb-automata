@@ -88,6 +88,58 @@ test("reconciles only confirmed Job Cell transaction blocks ahead of a stale che
   assert.equal(logs[0]?.["projectedBlocks"], 2);
 });
 
+test("reconciles V2 Job Cell blocks and projects each canonical block once", async () => {
+  const queries: string[] = [];
+  const v2Blocks: bigint[] = [];
+  const reconciler = new LiveJobReconciler(
+    {
+      getTipHeader: async () => ({ number: 150n }),
+      findTransactionsPaged: async (query: { script: { codeHash: string } }) => {
+        queries.push(query.script.codeHash);
+        return {
+          lastCursor: "done",
+          transactions: [
+            { blockNumber: 120n, cells: [], txHash: `0x${"22".repeat(32)}`, txIndex: 0n },
+          ],
+        };
+      },
+      getBlockByNumber: async (number: bigint) => block(number),
+    } as never,
+    { load: async () => ({ blockNumber: 100n }) } as never,
+    { projectBlock: async () => undefined } as never,
+    { indexBlock: async () => undefined } as never,
+    { error: () => undefined, info: () => undefined },
+    {
+      enabled: true,
+      loadDeployment: async () => deployment,
+      daoHarvestV2: {
+        deployment: {
+          contracts: {
+            jobLock: { codeHash: `0x${"55".repeat(32)}` },
+            vaultLock: { codeHash: `0x${"66".repeat(32)}` },
+            compensationLock: { codeHash: `0x${"77".repeat(32)}` },
+          },
+        } as never,
+        indexer: {
+          projectBlock: async (candidate: { header: { number: bigint } }) => {
+            v2Blocks.push(candidate.header.number);
+            return {} as never;
+          },
+        },
+      },
+    },
+  );
+
+  assert.equal((await reconciler.runOnce()).projectedBlocks, 1);
+  assert.deepEqual(queries, [
+    deployment.contracts["job-lock"].script.codeHash,
+    `0x${"55".repeat(32)}`,
+    `0x${"66".repeat(32)}`,
+    `0x${"77".repeat(32)}`,
+  ]);
+  assert.deepEqual(v2Blocks, [120n]);
+});
+
 test("remembers the reconciled tip and scans only the new confirmed range", async () => {
   let tip = 150n;
   const ranges: bigint[][] = [];

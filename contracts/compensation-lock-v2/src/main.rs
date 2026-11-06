@@ -6,7 +6,7 @@ use ckb_std::{
     default_alloc, entry,
     high_level::{
         QueryIter, load_cell_capacity, load_cell_data, load_cell_lock, load_cell_lock_hash,
-        load_cell_type_hash, load_script, load_witness_args,
+        load_cell_type_hash, load_script, load_script_hash, load_witness_args,
     },
 };
 use molecule::prelude::Entity;
@@ -48,7 +48,8 @@ mod error_codes {
 }
 
 use dao_harvest_v2::{
-    CLOSE_OPERATION, FALLBACK_CLAIM_OPERATION, OWNER_COMPLETE_OPERATION, PREFERRED_CLAIM_OPERATION,
+    CLOSE_OPERATION, FALLBACK_CLAIM_OPERATION, FALLBACK_PREPARE_OPERATION,
+    OWNER_COMPLETE_OPERATION, PREFERRED_CLAIM_OPERATION, PREFERRED_PREPARE_OPERATION,
     RECOVER_OPERATION, ROTATE_OPERATION, SWEEP_OPERATION,
 };
 use error_codes::ScriptError;
@@ -67,6 +68,9 @@ fn main() -> i8 {
 
 fn program_entry() -> Result<(), ScriptError> {
     let script = load_script().map_err(|_| ScriptError::InvalidCompensationCell)?;
+    if script.args().raw_data().len() == 64 {
+        return validate_operator_accumulator(&script.args().raw_data());
+    }
     let args = dao_harvest_v2::decode_compensation_lock_args(&script.args().raw_data())
         .ok_or(ScriptError::InvalidCompensationCell)?;
     if let Some((request, envelope)) = load_terminal_close_request() {
@@ -153,6 +157,102 @@ fn program_entry() -> Result<(), ScriptError> {
         return Err(ScriptError::MissingOwnerAuthorization);
     }
     validate_successor(operation, &request, &envelope, &args, &grouped)
+}
+
+fn validate_operator_accumulator(args: &[u8]) -> Result<(), ScriptError> {
+    let owner: [u8; 32] = args[..32]
+        .try_into()
+        .map_err(|_| ScriptError::InvalidOperatorAccumulator)?;
+    let policy: [u8; 32] = args[32..]
+        .try_into()
+        .map_err(|_| ScriptError::InvalidOperatorAccumulator)?;
+    let group_hash = load_script_hash().map_err(|_| ScriptError::InvalidOperatorAccumulator)?;
+    if QueryIter::new(load_cell_lock_hash, Source::GroupInput).count() != 1 {
+        return Err(ScriptError::InvalidOperatorAccumulator);
+    }
+    let job_index = QueryIter::new(load_cell_type_hash, Source::Input)
+        .enumerate()
+        .find_map(|(index, hash)| (hash == Some(policy)).then_some(index));
+    let Some(job_index) = job_index else {
+        return if QueryIter::new(load_cell_lock_hash, Source::Input).any(|hash| hash == owner) {
+            Ok(())
+        } else {
+            Err(ScriptError::MissingOwnerAuthorization)
+        };
+    };
+    let witness =
+        load_witness_args(job_index, Source::Input).map_err(|_| ScriptError::InvalidWitnessMode)?;
+    let request = DaoHarvestWitnessV2::from_slice(
+        &witness
+            .input_type()
+            .to_opt()
+            .ok_or(ScriptError::InvalidWitnessMode)?
+            .raw_data(),
+    )
+    .map_err(|_| ScriptError::InvalidWitnessMode)?;
+    let operation = request.operation().as_slice()[0];
+    let candidates = [
+        (
+            read_u32(request.prepare_accumulator_input_index().as_slice()),
+            read_u32(request.prepare_accumulator_output_index().as_slice()),
+        ),
+        (
+            read_u32(request.claim_accumulator_input_index().as_slice()),
+            read_u32(request.claim_accumulator_output_index().as_slice()),
+        ),
+    ];
+    let (input, output) = candidates
+        .into_iter()
+        .find(|(input, _)| {
+            *input != dao_harvest_v2::ABSENT_INDEX
+                && load_cell_lock_hash(*input as usize, Source::Input)
+                    .is_ok_and(|hash| hash == group_hash)
+        })
+        .ok_or(ScriptError::OperationLayoutMismatch)?;
+    if output == dao_harvest_v2::ABSENT_INDEX
+        || load_cell_lock_hash(output as usize, Source::Output)
+            .map(|hash| hash != group_hash)
+            .unwrap_or(true)
+        || !load_cell_data(input as usize, Source::Input)
+            .map_err(|_| ScriptError::InvalidOperatorAccumulator)?
+            .is_empty()
+        || !load_cell_data(output as usize, Source::Output)
+            .map_err(|_| ScriptError::InvalidOperatorAccumulator)?
+            .is_empty()
+        || load_cell_type_hash(input as usize, Source::Input)
+            .map_err(|_| ScriptError::InvalidOperatorAccumulator)?
+            .is_some()
+        || load_cell_type_hash(output as usize, Source::Output)
+            .map_err(|_| ScriptError::InvalidOperatorAccumulator)?
+            .is_some()
+    {
+        return Err(ScriptError::InvalidOperatorAccumulator);
+    }
+    let before = load_cell_capacity(input as usize, Source::Input)
+        .map_err(|_| ScriptError::InvalidOperatorAccumulator)?;
+    let after = load_cell_capacity(output as usize, Source::Output)
+        .map_err(|_| ScriptError::InvalidOperatorAccumulator)?;
+    if matches!(
+        operation,
+        PREFERRED_PREPARE_OPERATION | FALLBACK_PREPARE_OPERATION
+    ) {
+        if before != after
+            || read_u32(request.identity_input_index().as_slice()) != input
+            || !QueryIter::new(load_cell_lock_hash, Source::Input).any(|hash| hash == owner)
+        {
+            return Err(ScriptError::MissingOwnerAuthorization);
+        }
+    } else if !matches!(
+        operation,
+        PREFERRED_CLAIM_OPERATION
+            | FALLBACK_CLAIM_OPERATION
+            | OWNER_COMPLETE_OPERATION
+            | RECOVER_OPERATION
+    ) || after < before
+    {
+        return Err(ScriptError::InvalidOperatorAccumulator);
+    }
+    Ok(())
 }
 
 fn validate_successor(

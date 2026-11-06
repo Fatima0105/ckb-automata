@@ -55,6 +55,7 @@ enum PrepareMutation {
     None,
     Principal,
     Unauthorized,
+    PlainIdentity,
     ForgedCredit,
     Early,
     SinceMetric,
@@ -101,6 +102,17 @@ fn always_success(context: &mut Context, discriminator: u8) -> Script {
             Bytes::from(vec![discriminator]),
         )
         .expect("always success")
+}
+
+fn operator_accumulator(
+    context: &mut Context,
+    owner_lock_hash: [u8; 32],
+    policy_script_hash: [u8; 32],
+) -> Script {
+    let mut args = Vec::with_capacity(64);
+    args.extend_from_slice(&owner_lock_hash);
+    args.extend_from_slice(&policy_script_hash);
+    deploy_with_args(context, "compensation-lock-v2", Bytes::from(args)).0
 }
 
 fn molecule_bytes(value: &[u8]) -> MoleculeBytes {
@@ -407,11 +419,23 @@ fn build_prepare_case_kind(mutation: PrepareMutation, fallback_mode: bool) -> Co
     let input_progress =
         DaoHarvestProgressV2::from_slice(&setup_envelope.progress().raw_data()).unwrap();
 
-    let preferred = always_success(&mut context, if fallback_mode { 4 } else { 3 });
-    let operator = if matches!(mutation, PrepareMutation::Unauthorized) {
+    let preferred_owner = always_success(&mut context, if fallback_mode { 4 } else { 3 });
+    let operator_owner = if matches!(mutation, PrepareMutation::Unauthorized) {
         always_success(&mut context, 9)
     } else {
-        preferred
+        preferred_owner
+    };
+    let operator_owner_hash: [u8; 32] = operator_owner.calc_script_hash().unpack();
+    let policy_hash: [u8; 32] = setup_outputs[0]
+        .type_()
+        .to_opt()
+        .unwrap()
+        .calc_script_hash()
+        .unpack();
+    let operator = if matches!(mutation, PrepareMutation::PlainIdentity) {
+        operator_owner.clone()
+    } else {
+        operator_accumulator(&mut context, operator_owner_hash, policy_hash)
     };
     let operator_hash: [u8; 32] = operator.calc_script_hash().unpack();
     let operator_cell = context.create_cell(
@@ -469,12 +493,12 @@ fn build_prepare_case_kind(mutation: PrepareMutation, fallback_mode: bool) -> Co
         .vault_input_index(1_u32.to_le_bytes())
         .compensation_input_index(ABSENT.to_le_bytes())
         .identity_input_index(2_u32.to_le_bytes())
-        .prepare_accumulator_input_index(ABSENT.to_le_bytes())
+        .prepare_accumulator_input_index(2_u32.to_le_bytes())
         .claim_accumulator_input_index(ABSENT.to_le_bytes())
         .job_output_index(0_u32.to_le_bytes())
         .vault_output_index(1_u32.to_le_bytes())
         .compensation_output_index(ABSENT.to_le_bytes())
-        .prepare_accumulator_output_index(ABSENT.to_le_bytes())
+        .prepare_accumulator_output_index(2_u32.to_le_bytes())
         .claim_accumulator_output_index(ABSENT.to_le_bytes())
         .payload_hash(<[u8; 32]>::try_from(job.payload_hash().as_slice()).unwrap())
         .progress_hash(<[u8; 32]>::try_from(job.trigger_params_hash().as_slice()).unwrap())
@@ -520,6 +544,19 @@ fn build_prepare_case_kind(mutation: PrepareMutation, fallback_mode: bool) -> Co
                 .previous_output(operator_cell)
                 .build(),
         )
+        .input(
+            CellInput::new_builder()
+                .previous_output(
+                    context.create_cell(
+                        CellOutput::new_builder()
+                            .capacity(300 * CKB)
+                            .lock(operator_owner.clone())
+                            .build(),
+                        Bytes::new(),
+                    ),
+                )
+                .build(),
+        )
         .output(setup_outputs[0].clone())
         .output(
             setup_outputs[1]
@@ -530,12 +567,19 @@ fn build_prepare_case_kind(mutation: PrepareMutation, fallback_mode: bool) -> Co
         )
         .output(
             CellOutput::new_builder()
+                .capacity(300 * CKB)
+                .lock(operator.clone())
+                .build(),
+        )
+        .output(
+            CellOutput::new_builder()
                 .capacity(299 * CKB)
-                .lock(operator)
+                .lock(operator_owner)
                 .build(),
         )
         .output_data(successor_job.as_bytes().pack())
         .output_data(Bytes::copy_from_slice(&42_u64.to_le_bytes()).pack())
+        .output_data(Bytes::new().pack())
         .output_data(Bytes::new().pack())
         .witness(
             WitnessArgs::new_builder()
@@ -545,6 +589,7 @@ fn build_prepare_case_kind(mutation: PrepareMutation, fallback_mode: bool) -> Co
                 .as_bytes()
                 .pack(),
         )
+        .witness(WitnessArgs::default().as_bytes().pack())
         .witness(WitnessArgs::default().as_bytes().pack())
         .witness(WitnessArgs::default().as_bytes().pack())
         .build();
@@ -657,7 +702,15 @@ fn build_claim_case_kind(
         progress_hash(input_progress.as_slice()).unwrap()
     );
 
-    let operator = always_success(&mut context, 3);
+    let operator_owner = always_success(&mut context, 3);
+    let operator_owner_hash: [u8; 32] = operator_owner.calc_script_hash().unpack();
+    let policy_hash: [u8; 32] = outputs[0]
+        .type_()
+        .to_opt()
+        .unwrap()
+        .calc_script_hash()
+        .unpack();
+    let operator = operator_accumulator(&mut context, operator_owner_hash, policy_hash);
     let claimant = always_success(&mut context, 11);
     let owner = always_success(&mut context, 1);
     let wrong_reward = always_success(&mut context, 12);
@@ -1344,7 +1397,7 @@ fn build_rotation_case(mutate_fee: bool) -> ContractCase {
     }
 }
 
-fn build_withdrawing_recovery_case() -> ContractCase {
+fn build_withdrawing_recovery_case(settle_prepare_fee: bool) -> ContractCase {
     let prepared = build_prepare_case(PrepareMutation::None);
     let ContractCase {
         mut context,
@@ -1375,7 +1428,15 @@ fn build_withdrawing_recovery_case() -> ContractCase {
     let (compensation, compensation_data) = compensation_fixture.unwrap();
     let compensation_cell = context.create_cell(compensation, compensation_data);
     let owner = always_success(&mut context, 1);
-    let preparer = always_success(&mut context, 3);
+    let preparer_owner = always_success(&mut context, 3);
+    let preparer_owner_hash: [u8; 32] = preparer_owner.calc_script_hash().unpack();
+    let policy_hash: [u8; 32] = outputs[0]
+        .type_()
+        .to_opt()
+        .unwrap()
+        .calc_script_hash()
+        .unpack();
+    let preparer = operator_accumulator(&mut context, preparer_owner_hash, policy_hash);
     let funding = always_success(&mut context, 10);
     let owner_cell = context.create_cell(
         CellOutput::new_builder()
@@ -1425,12 +1486,16 @@ fn build_withdrawing_recovery_case() -> ContractCase {
         .vault_input_index(1_u32.to_le_bytes())
         .compensation_input_index(2_u32.to_le_bytes())
         .identity_input_index(3_u32.to_le_bytes())
-        .prepare_accumulator_input_index(4_u32.to_le_bytes())
+        .prepare_accumulator_input_index(
+            if settle_prepare_fee { 4_u32 } else { ABSENT }.to_le_bytes(),
+        )
         .claim_accumulator_input_index(ABSENT.to_le_bytes())
         .job_output_index(ABSENT.to_le_bytes())
         .vault_output_index(ABSENT.to_le_bytes())
         .compensation_output_index(ABSENT.to_le_bytes())
-        .prepare_accumulator_output_index(1_u32.to_le_bytes())
+        .prepare_accumulator_output_index(
+            if settle_prepare_fee { 1_u32 } else { ABSENT }.to_le_bytes(),
+        )
         .claim_accumulator_output_index(ABSENT.to_le_bytes())
         .payload_hash(<[u8; 32]>::try_from(job.payload_hash().as_slice()).unwrap())
         .progress_hash(<[u8; 32]>::try_from(job.trigger_params_hash().as_slice()).unwrap())
@@ -1455,47 +1520,56 @@ fn build_withdrawing_recovery_case() -> ContractCase {
     let maximum = maximum_withdraw_capacity(PRINCIPAL, occupied, 1_000, 1_100).unwrap();
     let gross = maximum - PRINCIPAL;
     let prepare_fee = 2 * CKB;
+    let mut builder = TransactionBuilder::default()
+        .input(
+            CellInput::new_builder()
+                .previous_output(job_out_point)
+                .build(),
+        )
+        .input(
+            CellInput::new_builder()
+                .since(EPOCH | 180)
+                .previous_output(vault_out_point)
+                .build(),
+        )
+        .input(
+            CellInput::new_builder()
+                .previous_output(compensation_cell)
+                .build(),
+        )
+        .input(CellInput::new_builder().previous_output(owner_cell).build());
+    if settle_prepare_fee {
+        builder = builder.input(
+            CellInput::new_builder()
+                .previous_output(accumulator_cell)
+                .build(),
+        );
+    }
+    builder = builder
+        .input(
+            CellInput::new_builder()
+                .previous_output(funding_cell)
+                .build(),
+        )
+        .output(
+            CellOutput::new_builder()
+                .capacity(
+                    JOB_CAPACITY + maximum - if settle_prepare_fee { prepare_fee } else { 0 }
+                        + SEED,
+                )
+                .lock(owner)
+                .build(),
+        );
+    if settle_prepare_fee {
+        builder = builder.output(
+            CellOutput::new_builder()
+                .capacity(accumulator_capacity + prepare_fee)
+                .lock(preparer)
+                .build(),
+        );
+    }
     let transaction = context.complete_tx(
-        TransactionBuilder::default()
-            .input(
-                CellInput::new_builder()
-                    .previous_output(job_out_point)
-                    .build(),
-            )
-            .input(
-                CellInput::new_builder()
-                    .since(EPOCH | 180)
-                    .previous_output(vault_out_point)
-                    .build(),
-            )
-            .input(
-                CellInput::new_builder()
-                    .previous_output(compensation_cell)
-                    .build(),
-            )
-            .input(CellInput::new_builder().previous_output(owner_cell).build())
-            .input(
-                CellInput::new_builder()
-                    .previous_output(accumulator_cell)
-                    .build(),
-            )
-            .input(
-                CellInput::new_builder()
-                    .previous_output(funding_cell)
-                    .build(),
-            )
-            .output(
-                CellOutput::new_builder()
-                    .capacity(JOB_CAPACITY + maximum - prepare_fee + SEED)
-                    .lock(owner)
-                    .build(),
-            )
-            .output(
-                CellOutput::new_builder()
-                    .capacity(accumulator_capacity + prepare_fee)
-                    .lock(preparer)
-                    .build(),
-            )
+        builder
             .output(
                 CellOutput::new_builder()
                     .capacity(300 * CKB + funding_capacity - gross)
@@ -1503,7 +1577,11 @@ fn build_withdrawing_recovery_case() -> ContractCase {
                     .build(),
             )
             .output_data(Bytes::new().pack())
-            .output_data(Bytes::new().pack())
+            .outputs_data(if settle_prepare_fee {
+                vec![Bytes::new().pack()]
+            } else {
+                vec![]
+            })
             .output_data(Bytes::new().pack())
             .header_dep(deposit_header.hash())
             .header_dep(withdrawing_header.hash())
@@ -1518,6 +1596,107 @@ fn build_withdrawing_recovery_case() -> ContractCase {
             .witness(
                 WitnessArgs::new_builder()
                     .input_type(Some(Bytes::copy_from_slice(&0_u64.to_le_bytes())).pack())
+                    .build()
+                    .as_bytes()
+                    .pack(),
+            )
+            .build(),
+    );
+    ContractCase {
+        context,
+        transaction,
+        compensation_fixture: None,
+    }
+}
+
+fn build_operator_accumulator_case(
+    operation: u8,
+    output_delta: i64,
+    include_owner: bool,
+) -> ContractCase {
+    let mut context = Context::new_with_deterministic_rng();
+    let owner = always_success(&mut context, 21);
+    let job_lock = always_success(&mut context, 22);
+    let policy = always_success(&mut context, 23);
+    let owner_hash: [u8; 32] = owner.calc_script_hash().unpack();
+    let policy_hash: [u8; 32] = policy.calc_script_hash().unpack();
+    let mut accumulator_args = Vec::with_capacity(64);
+    accumulator_args.extend_from_slice(&owner_hash);
+    accumulator_args.extend_from_slice(&policy_hash);
+    let (accumulator, _) = deploy_with_args(
+        &mut context,
+        "compensation-lock-v2",
+        Bytes::from(accumulator_args),
+    );
+    let job_cell = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(300 * CKB)
+            .lock(job_lock)
+            .type_(Some(policy).pack())
+            .build(),
+        Bytes::new(),
+    );
+    let accumulator_capacity = 300 * CKB;
+    let accumulator_cell = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(accumulator_capacity)
+            .lock(accumulator.clone())
+            .build(),
+        Bytes::new(),
+    );
+    let owner_cell = include_owner.then(|| {
+        context.create_cell(
+            CellOutput::new_builder()
+                .capacity(300 * CKB)
+                .lock(owner)
+                .build(),
+            Bytes::new(),
+        )
+    });
+    let request = DaoHarvestWitnessV2::new_builder()
+        .version(DAO_HARVEST_V2_VERSION.to_le_bytes())
+        .operation(operation)
+        .flags(0)
+        .job_input_index(0_u32.to_le_bytes())
+        .vault_input_index(ABSENT.to_le_bytes())
+        .compensation_input_index(ABSENT.to_le_bytes())
+        .identity_input_index(1_u32.to_le_bytes())
+        .prepare_accumulator_input_index(1_u32.to_le_bytes())
+        .claim_accumulator_input_index(ABSENT.to_le_bytes())
+        .job_output_index(ABSENT.to_le_bytes())
+        .vault_output_index(ABSENT.to_le_bytes())
+        .compensation_output_index(ABSENT.to_le_bytes())
+        .prepare_accumulator_output_index(0_u32.to_le_bytes())
+        .claim_accumulator_output_index(ABSENT.to_le_bytes())
+        .payload_hash([0_u8; 32])
+        .progress_hash([0_u8; 32])
+        .prepare_credit_hash([0_u8; 32])
+        .build();
+    let output_capacity = accumulator_capacity
+        .checked_add_signed(output_delta)
+        .expect("valid test capacity");
+    let mut builder = TransactionBuilder::default()
+        .input(CellInput::new_builder().previous_output(job_cell).build())
+        .input(
+            CellInput::new_builder()
+                .previous_output(accumulator_cell)
+                .build(),
+        );
+    if let Some(owner_cell) = owner_cell {
+        builder = builder.input(CellInput::new_builder().previous_output(owner_cell).build());
+    }
+    let transaction = context.complete_tx(
+        builder
+            .output(
+                CellOutput::new_builder()
+                    .capacity(output_capacity)
+                    .lock(accumulator)
+                    .build(),
+            )
+            .output_data(Bytes::new().pack())
+            .witness(
+                WitnessArgs::new_builder()
+                    .input_type(Some(request.as_bytes()).pack())
                     .build()
                     .as_bytes()
                     .pack(),
@@ -1624,6 +1803,7 @@ fn prepare_rejects_principal_authority_credit_time_and_progress_mutations() {
     for mutation in [
         PrepareMutation::Principal,
         PrepareMutation::Unauthorized,
+        PrepareMutation::PlainIdentity,
         PrepareMutation::ForgedCredit,
         PrepareMutation::Early,
         PrepareMutation::SinceMetric,
@@ -1732,7 +1912,41 @@ fn owner_rotation_changes_only_the_committed_operator_set() {
 
 #[test]
 fn withdrawing_recovery_settles_only_the_credited_prepare_work() {
-    verify(&build_withdrawing_recovery_case()).expect("valid withdrawing-state recovery");
+    verify(&build_withdrawing_recovery_case(true)).expect("valid withdrawing-state recovery");
+    verify(&build_withdrawing_recovery_case(false))
+        .expect("owner-only withdrawing-state recovery cannot depend on the preparer");
+}
+
+#[test]
+fn policy_bound_accumulator_allows_owner_independent_claim_settlement() {
+    verify(&build_operator_accumulator_case(
+        crate::dao_harvest_v2::FALLBACK_CLAIM_OPERATION,
+        CKB as i64,
+        false,
+    ))
+    .expect("a fallback claim can credit the preparer without its signature");
+    verify(&build_operator_accumulator_case(
+        crate::dao_harvest_v2::FALLBACK_CLAIM_OPERATION,
+        -(CKB as i64),
+        false,
+    ))
+    .expect_err("a protocol transition cannot reduce an operator accumulator");
+}
+
+#[test]
+fn policy_bound_accumulator_requires_owner_authorization_during_prepare() {
+    verify(&build_operator_accumulator_case(
+        crate::dao_harvest_v2::PREFERRED_PREPARE_OPERATION,
+        0,
+        true,
+    ))
+    .expect("the operator can prepare with a co-spent owner-controlled input");
+    verify(&build_operator_accumulator_case(
+        crate::dao_harvest_v2::PREFERRED_PREPARE_OPERATION,
+        0,
+        false,
+    ))
+    .expect_err("prepare requires proof that the accumulator owner authorized the action");
 }
 
 #[test]

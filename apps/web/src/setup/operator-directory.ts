@@ -1,6 +1,7 @@
 import type { SetupDraft } from "./setup-flow.ts";
 
 export type PublicOperatorId = "operator-a" | "operator-b";
+export type OperatorSelectionId = "none" | PublicOperatorId;
 
 export interface PublicOperator {
   readonly address: string;
@@ -24,10 +25,11 @@ export const PUBLIC_OPERATORS = Object.freeze([
   }),
 ] satisfies readonly PublicOperator[]);
 
-export const DEFAULT_OPERATOR_ID: PublicOperatorId = "operator-a";
+export const DEFAULT_OPERATOR_ID: OperatorSelectionId = "none";
 
-export function selectedOperatorId(draft: SetupDraft): PublicOperatorId {
+export function selectedOperatorId(draft: SetupDraft): OperatorSelectionId {
   const selected = draft["preferredOperatorId"];
+  if (selected === "none" || draft["operatorMode"] === "automatic") return "none";
   if (PUBLIC_OPERATORS.some(({ id }) => id === selected)) return selected as PublicOperatorId;
   const matchingAddress = PUBLIC_OPERATORS.find(
     ({ address }) => address === draft["preferredOperatorAddress"],
@@ -35,7 +37,15 @@ export function selectedOperatorId(draft: SetupDraft): PublicOperatorId {
   return matchingAddress?.id ?? DEFAULT_OPERATOR_ID;
 }
 
-export function operatorDraftFields(id: PublicOperatorId): Readonly<Record<string, string>> {
+export function operatorDraftFields(id: OperatorSelectionId): Readonly<Record<string, string>> {
+  if (id === "none") {
+    return Object.freeze({
+      operatorMode: "automatic",
+      preferredOperatorId: "none",
+      preferredOperatorAddress: "",
+      backupOperatorAddress: "",
+    });
+  }
   const preferred = PUBLIC_OPERATORS.find((operator) => operator.id === id);
   if (preferred === undefined) throw new TypeError("Choose an available operator.");
   const backup = PUBLIC_OPERATORS.find(

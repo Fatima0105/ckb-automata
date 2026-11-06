@@ -26,7 +26,17 @@ test("selecting one operator automatically assigns the other as backup", () => {
   assert.equal(selected["operatorMode"], "custom");
 });
 
-test("legacy automatic drafts fall back to Operator A", () => {
-  assert.equal(selectedOperatorId({ operatorMode: "automatic" }), "operator-a");
-  assert.equal(DEFAULT_OPERATOR_DRAFT["preferredOperatorId"], "operator-a");
+test("no preferred operator is selected by default", () => {
+  assert.equal(selectedOperatorId({ operatorMode: "automatic" }), "none");
+  assert.equal(DEFAULT_OPERATOR_DRAFT["preferredOperatorId"], "none");
+  assert.equal(DEFAULT_OPERATOR_DRAFT["operatorMode"], "automatic");
+  assert.equal(DEFAULT_OPERATOR_DRAFT["preferredOperatorAddress"], "");
+  assert.equal(DEFAULT_OPERATOR_DRAFT["backupOperatorAddress"], "");
+});
+
+test("selecting None clears an explicit operator preference", () => {
+  const selected = operatorDraftFields("none");
+  assert.equal(selected["preferredOperatorId"], "none");
+  assert.equal(selected["operatorMode"], "automatic");
+  assert.equal(selectedOperatorId(selected), "none");
 });

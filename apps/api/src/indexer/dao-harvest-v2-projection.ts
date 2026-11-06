@@ -256,7 +256,6 @@ export function extractDaoHarvestV2ProjectionEvents(
     const relevantOutput = transaction.outputs.some(
       (output) =>
         scriptMatches(output.type, deployment.policy) ||
-        scriptMatches(output.lock, deployment.vaultLock) ||
         scriptMatches(output.lock, deployment.compensationLock),
     );
     const relevantInput = transaction.inputs.some((input) => {
@@ -268,7 +267,6 @@ export function extractDaoHarvestV2ProjectionEvents(
       return (
         cell !== undefined &&
         (scriptMatches(cell.type, deployment.policy) ||
-          scriptMatches(cell.lock, deployment.vaultLock) ||
           scriptMatches(cell.lock, deployment.compensationLock))
       );
     });

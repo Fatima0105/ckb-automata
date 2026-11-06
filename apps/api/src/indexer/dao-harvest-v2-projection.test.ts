@@ -210,6 +210,20 @@ test("extracts a fully bound V2 setup projection from chain bytes", () => {
   assert.equal(event.operatorWindow?.prepareCutoffSince, absoluteSince(109n));
 });
 
+test("shared vault locks do not make a transaction relevant to another revision", () => {
+  const { block } = setupBlock();
+  const otherRevision: DaoHarvestV2ProjectionDeployment = {
+    ...deployment,
+    jobLock: script("8"),
+    policy: script("9", hash("8")),
+    compensationLock: script("0"),
+  };
+
+  const result = extractDaoHarvestV2ProjectionEvents(block as never, otherRevision);
+
+  assert.deepEqual(result, { events: [], malformed: 0, partial: 0 });
+});
+
 test("prepare projection derives the withdrawing successor from input progress", () => {
   const setup = setupBlock();
   const credit = DaoHarvestPrepareCreditV2.pack({

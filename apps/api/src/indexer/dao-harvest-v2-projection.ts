@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import type { ClientBlock } from "@ckb-ccc/shell";
 import { hexToBytes, scriptToHash } from "@nervosnetwork/ckb-sdk-utils";
 
@@ -583,7 +585,7 @@ export function rebuildDaoHarvestV2Snapshot(
   const unique = new Map<string, DaoHarvestV2ProjectionEvent>();
   for (const event of sourceEvents) {
     const existing = unique.get(event.eventId);
-    if (existing && JSON.stringify(existing) !== JSON.stringify(event)) {
+    if (existing && !isDeepStrictEqual(existing, event)) {
       throw new Error("duplicate V2 event contains contradictory chain evidence");
     }
     unique.set(event.eventId, event);

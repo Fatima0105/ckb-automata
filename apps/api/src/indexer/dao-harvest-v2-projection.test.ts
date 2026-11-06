@@ -435,8 +435,11 @@ function partialClaim(setup: DaoHarvestV2ProjectionEvent): DaoHarvestV2Projectio
 test("rebuild is duplicate-safe and preserves explicit partial settlement evidence", () => {
   const setup = extractDaoHarvestV2ProjectionEvents(setupBlock().block as never, deployment)
     .events[0]!;
+  const reordered = Object.fromEntries(
+    Object.entries(setup).toReversed(),
+  ) as unknown as typeof setup;
   const claim = partialClaim(setup);
-  const rebuilt = rebuildDaoHarvestV2Snapshot([setup, setup, claim]);
+  const rebuilt = rebuildDaoHarvestV2Snapshot([setup, reordered, claim]);
   assert.equal(rebuilt?.cycleIndex, "1");
   assert.equal(rebuilt?.projectionCompleteness, "partial");
   assert.equal(rebuilt?.serviceSettlement.status, "partial");

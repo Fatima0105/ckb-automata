@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import type { AutomataDatabase } from "../database/client.ts";
@@ -138,7 +140,7 @@ export class DaoHarvestV2ProjectionStore {
                 }
               : {}),
           };
-          if (JSON.stringify(comparableExisting) !== JSON.stringify(event)) {
+          if (!isDeepStrictEqual(comparableExisting, event)) {
             throw new Error("duplicate V2 event contradicts stored chain evidence");
           }
         }

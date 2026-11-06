@@ -224,8 +224,7 @@
   display: flex;
   gap: var(--ui-space-3);
 }
-.harvest-v2-values,
-.harvest-v2-explainer {
+.harvest-v2-values {
   display: grid;
   gap: var(--ui-space-3);
   margin: 0;
@@ -233,8 +232,7 @@
 .harvest-v2-values {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.harvest-v2-values > div,
-.harvest-v2-explainer > div {
+.harvest-v2-values > div {
   background: var(--ui-color-surface-subtle);
   display: grid;
   gap: var(--ui-space-1);
@@ -244,8 +242,7 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
-.harvest-v2-values dt,
-.harvest-v2-explainer span {
+.harvest-v2-values dt {
   color: var(--ui-color-text-muted);
   font-size: 0.8125rem;
 }
@@ -254,10 +251,6 @@
   display: inline-flex;
   gap: var(--ui-space-1);
 }
-.harvest-v2-explainer {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 @keyframes harvest-pulse {
   to {
     opacity: 0.45;
@@ -268,7 +261,6 @@
   .harvest-detail__summary {
     grid-template-columns: minmax(0, 1fr);
   }
-  .harvest-v2-explainer,
   .harvest-v2-values {
     grid-template-columns: minmax(0, 1fr);
   }

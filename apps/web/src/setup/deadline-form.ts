@@ -9,11 +9,11 @@ import {
 import { ckbToShannons, shannonsToCkb } from "./ckb-amount.ts";
 import { validateAutomationTitle } from "./automation-title.ts";
 import type { SetupDraft, SetupErrors, SetupStepId } from "./setup-flow.ts";
+import { DEFAULT_OPERATOR_DRAFT } from "./operator-directory.ts";
 
 export const DEADLINE_INITIAL_DRAFT: SetupDraft = Object.freeze({
+  ...DEFAULT_OPERATOR_DRAFT,
   outcome: "success",
-  operatorMode: "automatic",
-  preferredOperatorAddress: "",
   pledgeCkb: "",
   refundAddress: "",
   rewardCkb: "61",

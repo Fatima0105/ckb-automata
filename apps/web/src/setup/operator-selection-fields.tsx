@@ -1,79 +1,47 @@
 "use client";
 
-import { TextField } from "@ckb-automata/ui";
+import { SelectField } from "@ckb-automata/ui";
 
 import type { SetupStepRenderContext } from "./setup-stepper.tsx";
+import {
+  operatorDraftFields,
+  PUBLIC_OPERATORS,
+  selectedOperatorId,
+  type PublicOperatorId,
+} from "./operator-directory.ts";
 
 export function OperatorSelectionFields({
   context,
-  includeBackup = false,
-}: Readonly<{
-  context: SetupStepRenderContext;
-  includeBackup?: boolean;
-}>) {
-  const custom = context.draft["operatorMode"] === "custom";
+}: Readonly<{ context: SetupStepRenderContext }>) {
+  const selectedId = selectedOperatorId(context.draft);
+  const selectOperator = (id: PublicOperatorId) => {
+    for (const [name, value] of Object.entries(operatorDraftFields(id))) {
+      context.setField(name, value);
+    }
+  };
   return (
     <div className="setup-step__group operator-selection">
       <div>
         <h3>Who should process it?</h3>
-        <p>Use the CKAutomata operator or choose another compatible operator.</p>
+        <p>Choose the operator that gets the first opportunity to process this automation.</p>
       </div>
-      <fieldset className="setup-outcome">
-        <legend>Operator</legend>
-        <div aria-label="Operator selection" role="radiogroup">
-          <button
-            aria-checked={!custom}
-            onClick={() => context.setField("operatorMode", "automatic")}
-            role="radio"
-            type="button"
-          >
-            Automatic
-          </button>
-          <button
-            aria-checked={custom}
-            onClick={() => context.setField("operatorMode", "custom")}
-            role="radio"
-            type="button"
-          >
-            Choose operator
-          </button>
-        </div>
-      </fieldset>
-      {custom ? (
-        <div className="setup-form-grid">
-          <TextField
-            {...(context.errors["preferredOperatorAddress"] === undefined
-              ? {}
-              : { error: context.errors["preferredOperatorAddress"] })}
-            autoComplete="off"
-            hint="This operator gets the first opportunity to process the automation."
-            label="Preferred operator address"
-            name="preferredOperatorAddress"
-            onChange={(event) => context.setField("preferredOperatorAddress", event.target.value)}
-            placeholder="ckt1..."
-            required
-            value={context.draft["preferredOperatorAddress"] ?? ""}
-          />
-          {includeBackup ? (
-            <TextField
-              {...(context.errors["backupOperatorAddress"] === undefined
-                ? {}
-                : { error: context.errors["backupOperatorAddress"] })}
-              autoComplete="off"
-              hint="This operator may take over later if the preferred operator does not act."
-              label="Backup operator address"
-              name="backupOperatorAddress"
-              onChange={(event) => context.setField("backupOperatorAddress", event.target.value)}
-              placeholder="ckt1..."
-              required
-              value={context.draft["backupOperatorAddress"] ?? ""}
-            />
-          ) : null}
-        </div>
-      ) : null}
+      <SelectField
+        hint="All other active operators can take over later if the selected operator does not act."
+        label="Preferred operator"
+        name="preferredOperatorId"
+        onChange={(event) => selectOperator(event.target.value as PublicOperatorId)}
+        required
+        value={selectedId}
+      >
+        {PUBLIC_OPERATORS.map((operator) => (
+          <option key={operator.id} value={operator.id}>
+            {operator.name} - Active
+          </option>
+        ))}
+      </SelectField>
       <p className="setup-step__hint">
-        If the preferred operator does not act in time, another compatible operator or your wallet
-        can take over.
+        The selected operator acts first. The other active operator becomes the backup
+        automatically.
       </p>
     </div>
   );

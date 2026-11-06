@@ -14,6 +14,7 @@ import { ckbToShannons, shannonsToCkb } from "./ckb-amount.ts";
 import { validateAutomationTitle } from "./automation-title.ts";
 import { scheduleToBlock } from "./deadline-form.ts";
 import type { SetupDraft, SetupErrors, SetupStepId } from "./setup-flow.ts";
+import { DEFAULT_OPERATOR_DRAFT } from "./operator-directory.ts";
 
 const MAX_ABSOLUTE_BLOCK = (1n << 56n) - 1n;
 const PREVIEW_FEE = Object.freeze({
@@ -22,11 +23,10 @@ const PREVIEW_FEE = Object.freeze({
 });
 
 export const RECURRING_INITIAL_DRAFT: SetupDraft = Object.freeze({
+  ...DEFAULT_OPERATOR_DRAFT,
   amountCkb: "",
   firstExecutionAt: "",
   intervalMinutes: "",
-  operatorMode: "automatic",
-  preferredOperatorAddress: "",
   recipientAddress: "",
   runCount: "",
   title: "",

@@ -29,14 +29,13 @@ import {
 import { DAO_HARVEST_SETUP_STEPS, type SetupDraft, type SetupErrors } from "./setup-flow.ts";
 import { SetupStepper, type SetupStepRenderContext } from "./setup-stepper.tsx";
 import { OperatorSelectionFields } from "./operator-selection-fields.tsx";
+import { DEFAULT_OPERATOR_DRAFT } from "./operator-directory.ts";
 
 const INITIAL_DRAFT: SetupDraft = Object.freeze({
+  ...DEFAULT_OPERATOR_DRAFT,
   cycleCount: "1",
-  backupOperatorAddress: "",
-  operatorMode: "automatic",
   payoutAddress: "",
   principalCkb: "",
-  preferredOperatorAddress: "",
   recurrence: "once",
   title: "",
 });
@@ -273,21 +272,7 @@ function HarvestV2Details(context: SetupStepRenderContext) {
           value={context.draft["cycleCount"] ?? ""}
         />
       ) : null}
-      <div className="harvest-v2-explainer">
-        <div>
-          <strong>Preferred operator</strong>
-          <span>Gets the first safe opportunity to perform each step.</span>
-        </div>
-        <div>
-          <strong>Backup operator</strong>
-          <span>Can take over later if the preferred operator does not act.</span>
-        </div>
-        <div>
-          <strong>Recoverable reserve</strong>
-          <span>Keeps the compensation cell usable and returns when you close or recover.</span>
-        </div>
-      </div>
-      <OperatorSelectionFields context={context} includeBackup />
+      <OperatorSelectionFields context={context} />
       {session.status === "ready" ? (
         <InlineNotice title="Owner wallet connected" tone="success">
           <p>

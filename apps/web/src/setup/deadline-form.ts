@@ -12,6 +12,8 @@ import type { SetupDraft, SetupErrors, SetupStepId } from "./setup-flow.ts";
 
 export const DEADLINE_INITIAL_DRAFT: SetupDraft = Object.freeze({
   outcome: "success",
+  operatorMode: "automatic",
+  preferredOperatorAddress: "",
   pledgeCkb: "",
   refundAddress: "",
   rewardCkb: "61",
@@ -151,6 +153,21 @@ export async function validateDeadlineStep(
     ) {
       errors["pledgeCkb"] =
         `Recipient amount must be at least ${shannonsToCkb(requiredCapacity)} CKB for the selected recipient and refund addresses.`;
+    }
+    if (draft["operatorMode"] === "custom") {
+      const operatorAddress = required(
+        draft,
+        "preferredOperatorAddress",
+        "Enter the preferred operator address.",
+        errors,
+      );
+      if (operatorAddress) {
+        try {
+          await context.resolveLockHash(operatorAddress);
+        } catch {
+          errors["preferredOperatorAddress"] = "Enter a valid CKB testnet operator address.";
+        }
+      }
     }
   }
 

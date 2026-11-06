@@ -130,6 +130,10 @@ async function requestFromDraft(
   if (template === "recurring") {
     const ownerLock = await getOwnerLock(ownerLockHash);
     const recipientLock = await resolveLock(draft["recipientAddress"] ?? "");
+    const preferredOperatorLock =
+      draft["operatorMode"] === "custom"
+        ? await resolveLock(draft["preferredOperatorAddress"] ?? "")
+        : undefined;
     const value = parseRecurringCreationRequest({
       ownerLockHash: hashLock(ownerLock),
       recipientLockHash: hashLock(recipientLock),
@@ -139,12 +143,18 @@ async function requestFromDraft(
       totalRuns: draft["runCount"] ?? "",
       reward: ckbToShannons(RECURRING_SERVICE_CHARGE_CKB),
       creatorNonce,
+      ...(preferredOperatorLock === undefined
+        ? {}
+        : { preferredExecutorLockHash: hashLock(preferredOperatorLock) }),
     });
     return {
       operation: "create_recurring_job",
       value: {
         ...value,
-        lockResolutions: uniqueLockResolutions([ownerLock, recipientLock], hashLock),
+        lockResolutions: uniqueLockResolutions(
+          [ownerLock, recipientLock, ...(preferredOperatorLock ? [preferredOperatorLock] : [])],
+          hashLock,
+        ),
       },
     };
   }
@@ -152,6 +162,10 @@ async function requestFromDraft(
   const ownerLock = await getOwnerLock(ownerLockHash);
   const refundLock = await resolveLock(draft["refundAddress"] ?? "");
   const successLock = await resolveLock(draft["successAddress"] ?? "");
+  const preferredOperatorLock =
+    draft["operatorMode"] === "custom"
+      ? await resolveLock(draft["preferredOperatorAddress"] ?? "")
+      : undefined;
   const value = parseDeadlineCreationRequest({
     pledges: [
       {
@@ -166,12 +180,23 @@ async function requestFromDraft(
     cancelLockHash: hashLock(ownerLock),
     reward: ckbToShannons(DEADLINE_SERVICE_CHARGE_CKB),
     creatorNonce,
+    ...(preferredOperatorLock === undefined
+      ? {}
+      : { preferredExecutorLockHash: hashLock(preferredOperatorLock) }),
   });
   return {
     operation: "create_deadline_job",
     value: {
       ...value,
-      lockResolutions: uniqueLockResolutions([ownerLock, refundLock, successLock], hashLock),
+      lockResolutions: uniqueLockResolutions(
+        [
+          ownerLock,
+          refundLock,
+          successLock,
+          ...(preferredOperatorLock ? [preferredOperatorLock] : []),
+        ],
+        hashLock,
+      ),
     },
   };
 }

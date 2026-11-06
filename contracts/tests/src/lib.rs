@@ -72,6 +72,19 @@ pub mod generated_recurring {
     clippy::if_same_then_else,
     clippy::manual_is_multiple_of,
     clippy::needless_borrow,
+    clippy::useless_conversion,
+    clippy::write_literal
+)]
+pub mod generated_operator {
+    include!("../../generated/operator_v1.rs");
+}
+
+#[allow(
+    clippy::clone_on_copy,
+    clippy::derivable_impls,
+    clippy::if_same_then_else,
+    clippy::manual_is_multiple_of,
+    clippy::needless_borrow,
     clippy::write_literal
 )]
 pub mod generated_dao_harvest {
@@ -80,6 +93,10 @@ pub mod generated_dao_harvest {
 
 pub mod recurring {
     include!("../../shared/recurring.rs");
+}
+
+pub mod operator_selection {
+    include!("../../shared/operator_selection.rs");
 }
 
 pub mod dao_harvest {
@@ -130,6 +147,9 @@ mod owner_mode;
 
 #[cfg(test)]
 mod recurring_successor;
+
+#[cfg(test)]
+mod operator_selection_tests;
 
 #[cfg(test)]
 mod trigger_validation;

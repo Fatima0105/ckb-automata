@@ -31,6 +31,14 @@ import type {
 import type { ScriptIdentity } from "./job-inspection.ts";
 import { deriveJobId } from "./job-identity.ts";
 import type { RegisteredDeployment } from "./deployment-registry.ts";
+import type { OperatorAutomationDeployment } from "./operator-deployment.ts";
+import {
+  deriveOperatorPayloadHash,
+  normalizeOperatorSelection,
+  operatorTakeoverBlock,
+  packOperatorPayload,
+  unpackOperatorPayload,
+} from "./operator-selection.ts";
 import {
   deriveRecurringPayloadHash,
   isValidRecurringSchedule,
@@ -55,6 +63,11 @@ export interface RecurringCreationInput {
   readonly reward: IntegerInput;
   readonly creatorNonce: IntegerInput;
   readonly creationFee: FeeRangeInput;
+  readonly operator?: {
+    readonly deployment: OperatorAutomationDeployment;
+    readonly preferredExecutorLockHash: Hash32;
+    readonly takeoverDelayBlocks?: bigint;
+  };
 }
 
 export interface RecurringDisplayIntent {
@@ -70,10 +83,12 @@ export interface RecurringDisplayIntent {
   readonly finalRefund: "owner";
   readonly policyScriptHash: Hash32;
   readonly payloadHash: Hash32;
+  readonly preferredExecutorLockHash?: Hash32;
+  readonly takeoverBlock?: string;
 }
 
 export interface NormalizedRecurringIntent {
-  readonly version: 1;
+  readonly version: 1 | 2;
   readonly genesisHash: Hash32;
   readonly deploymentManifestSha256: string;
   readonly jobOutputIndex: 0;
@@ -90,6 +105,10 @@ export interface NormalizedRecurringIntent {
   readonly payloadHash: Hash32;
   readonly triggerParamsHash: Hash32;
   readonly recurringPayload: Hex;
+  readonly preferredExecutorLockHash?: Hash32;
+  readonly takeoverBlock?: string;
+  readonly operatorPayload?: Hex;
+  readonly operatorDeploymentManifestSha256?: string;
 }
 
 export interface RecurringCreationBuild {
@@ -159,7 +178,7 @@ function intentBody(intent: NormalizedRecurringIntent): Uint8Array {
     throw new TypeError("deployment manifest digest must be a lowercase SHA-256 value");
   }
   const payload = hexToBytes(intent.recurringPayload);
-  return concatenate(
+  const base = concatenate(
     hash32ToBytes(intent.genesisHash),
     hexToBytes(`0x${intent.deploymentManifestSha256}`),
     uint32(intent.jobOutputIndex),
@@ -177,6 +196,23 @@ function intentBody(intent: NormalizedRecurringIntent): Uint8Array {
     hash32ToBytes(intent.triggerParamsHash),
     uint32(payload.length),
     payload,
+  );
+  if (intent.version === 1) return base;
+  if (
+    intent.preferredExecutorLockHash === undefined ||
+    intent.takeoverBlock === undefined ||
+    intent.operatorPayload === undefined ||
+    intent.operatorDeploymentManifestSha256 === undefined
+  ) {
+    throw new TypeError("operator intent fields are incomplete");
+  }
+  return concatenate(
+    base,
+    hash32ToBytes(intent.preferredExecutorLockHash),
+    uint64ToLittleEndian(parseBlockNumber(intent.takeoverBlock)),
+    hexToBytes(`0x${intent.operatorDeploymentManifestSha256}`),
+    uint32(hexToBytes(intent.operatorPayload).length),
+    hexToBytes(intent.operatorPayload),
   );
 }
 
@@ -250,16 +286,36 @@ export function buildRecurringCreation(input: RecurringCreationInput): Recurring
     final_refund_kind: 0,
   });
   const recurringPayload = bytesToHex(recurringPayloadBytes) as Hex;
-  const policyScript = script(input.deployment.contracts["recurring-policy"], "0x");
-  const policyScriptHash = parseHash32(scriptToHash(policyScript));
-  const payloadHashBytes = deriveRecurringPayloadHash(
-    hash32ToBytes(policyScriptHash),
-    recurringPayloadBytes,
+  const operator = input.operator;
+  const selection =
+    operator === undefined
+      ? undefined
+      : normalizeOperatorSelection({
+          preferredExecutorLockHash: operator.preferredExecutorLockHash,
+          ...(operator.takeoverDelayBlocks === undefined
+            ? {}
+            : { takeoverDelayBlocks: operator.takeoverDelayBlocks }),
+        });
+  const operatorPayloadBytes =
+    selection === undefined ? undefined : packOperatorPayload(selection, recurringPayloadBytes);
+  const policyScript = script(
+    operator?.deployment.contracts.recurringPolicy ??
+      input.deployment.contracts["recurring-policy"],
+    "0x",
   );
+  const policyScriptHash = parseHash32(scriptToHash(policyScript));
+  const payloadHashBytes =
+    operatorPayloadBytes === undefined
+      ? deriveRecurringPayloadHash(hash32ToBytes(policyScriptHash), recurringPayloadBytes)
+      : deriveOperatorPayloadHash(hash32ToBytes(policyScriptHash), operatorPayloadBytes);
   const payloadHash = hash32FromBytes(payloadHashBytes);
+  const takeoverBlock =
+    selection === undefined
+      ? undefined
+      : operatorTakeoverBlock(firstNotBefore, selection.takeoverDelayBlocks);
   const triggerParamsHash = hash32FromBytes(deriveAbsoluteBlockTriggerHash(firstNotBefore));
   const intent = Object.freeze({
-    version: 1 as const,
+    version: operator === undefined ? (1 as const) : (2 as const),
     genesisHash: input.deployment.genesisHash,
     deploymentManifestSha256: input.deployment.manifestSha256,
     jobOutputIndex: 0 as const,
@@ -276,13 +332,21 @@ export function buildRecurringCreation(input: RecurringCreationInput): Recurring
     payloadHash,
     triggerParamsHash,
     recurringPayload,
+    ...(selection === undefined || takeoverBlock === undefined || operatorPayloadBytes === undefined
+      ? {}
+      : {
+          preferredExecutorLockHash: selection.preferredExecutorLockHash,
+          takeoverBlock: takeoverBlock.toString(),
+          operatorPayload: bytesToHex(operatorPayloadBytes) as Hex,
+          operatorDeploymentManifestSha256: operator!.deployment.manifestSha256,
+        }),
   });
   const encodedIntent = intentBody(intent);
   const intentHashBytes = protocolHash(RECURRING_CREATION_INTENT_DOMAIN, encodedIntent);
   const intentHash = hash32FromBytes(intentHashBytes);
   const jobIdBytes = deriveJobId({
     genesisHash: hash32ToBytes(input.deployment.genesisHash),
-    protocolVersion: 1,
+    protocolVersion: operator === undefined ? 1 : 2,
     creationCommitment: intentHashBytes,
     anchor: { kind: "output_index", outputIndex: 0n },
     creatorNonce,
@@ -302,18 +366,24 @@ export function buildRecurringCreation(input: RecurringCreationInput): Recurring
     reward: reward.toString(),
     remaining_budget: quote.remainingBudget.toString(),
     not_before: firstNotBefore.toString(),
-    not_after: "0",
+    not_after: takeoverBlock?.toString() ?? "0",
     remaining_runs: Number(totalRuns),
     cancel_lock_hash: [...hash32ToBytes(ownerLockHash)],
   });
   const jobData = bytesToHex(jobDataBytes) as Hex;
-  const jobLock = script(input.deployment.contracts["job-lock"], "0x");
+  const jobLock = script(
+    operator?.deployment.contracts.jobLock ?? input.deployment.contracts["job-lock"],
+    "0x",
+  );
   const transaction: UnsignedTransaction = Object.freeze({
     version: "0x0",
     cellDeps: Object.freeze([
-      input.deployment.manifest.secp256k1Blake160.cellDep,
-      input.deployment.contracts["job-lock"].cellDep,
-      input.deployment.contracts["recurring-policy"].cellDep,
+      operator?.deployment.secp256k1Blake160.cellDep ??
+        input.deployment.manifest.secp256k1Blake160.cellDep,
+      operator?.deployment.contracts.jobLock.cellDep ??
+        input.deployment.contracts["job-lock"].cellDep,
+      operator?.deployment.contracts.recurringPolicy.cellDep ??
+        input.deployment.contracts["recurring-policy"].cellDep,
     ]),
     headerDeps: Object.freeze([]),
     inputs: Object.freeze([]),
@@ -326,7 +396,12 @@ export function buildRecurringCreation(input: RecurringCreationInput): Recurring
     ]),
     outputsData: Object.freeze([jobData]),
     witnesses: Object.freeze([
-      serializeWitnessArgs({ lock: "", inputType: "", outputType: recurringPayload }) as Hex,
+      serializeWitnessArgs({
+        lock: "",
+        inputType: "",
+        outputType:
+          operatorPayloadBytes === undefined ? recurringPayload : bytesToHex(operatorPayloadBytes),
+      }) as Hex,
     ]),
   });
   const displayIntent: RecurringDisplayIntent = Object.freeze({
@@ -342,6 +417,12 @@ export function buildRecurringCreation(input: RecurringCreationInput): Recurring
     finalRefund: "owner",
     policyScriptHash,
     payloadHash,
+    ...(selection === undefined || takeoverBlock === undefined
+      ? {}
+      : {
+          preferredExecutorLockHash: selection.preferredExecutorLockHash,
+          takeoverBlock: takeoverBlock.toString(),
+        }),
   });
   return Object.freeze({
     transaction,
@@ -355,7 +436,10 @@ export function buildRecurringCreation(input: RecurringCreationInput): Recurring
     quote,
     completion: Object.freeze({
       requiredOutputCount: 1,
-      requiredOutputType: recurringPayload,
+      requiredOutputType:
+        operatorPayloadBytes === undefined
+          ? recurringPayload
+          : (bytesToHex(operatorPayloadBytes) as Hex),
       maximumFee: quote.estimatedFee.maximum,
     }),
   });
@@ -397,23 +481,36 @@ export function assertRecurringCompletion(
 export function reconstructRecurringDisplayIntent(
   transaction: UnsignedTransaction,
   deployment: RegisteredDeployment,
+  operatorDeployment?: OperatorAutomationDeployment,
 ): RecurringDisplayIntent {
   const output = transaction.outputs[0];
   const data = transaction.outputsData[0];
   const witness = transaction.witnesses[0];
   if (!output || !data || !witness) throw new Error("recurring creation is incomplete");
-  const expectedLock = script(deployment.contracts["job-lock"], "0x");
-  const expectedPolicy = script(deployment.contracts["recurring-policy"], "0x");
+  const v2Lock =
+    operatorDeployment === undefined
+      ? undefined
+      : script(operatorDeployment.contracts.jobLock, "0x");
+  const usesOperatorPolicy = v2Lock !== undefined && stable(output.lock) === stable(v2Lock);
+  const expectedLock = usesOperatorPolicy ? v2Lock : script(deployment.contracts["job-lock"], "0x");
+  const expectedPolicy = usesOperatorPolicy
+    ? script(operatorDeployment!.contracts.recurringPolicy, "0x")
+    : script(deployment.contracts["recurring-policy"], "0x");
   if (!outputMatches(output, { ...output, lock: expectedLock, type: expectedPolicy })) {
     throw new Error("recurring creation uses an unexpected script deployment");
   }
   const payloadHex = witnessOutputType(witness);
   if (!payloadHex) throw new Error("recurring creation is missing its payload witness");
   const job = JobDataV1.unpack(hexToBytes(data));
-  const payload = RecurringPayloadV1.unpack(hexToBytes(payloadHex));
+  const committedPayload = hexToBytes(payloadHex);
+  const operatorPayload = usesOperatorPolicy ? unpackOperatorPayload(committedPayload) : undefined;
+  const recurringPayloadBytes = operatorPayload?.applicationPayload ?? committedPayload;
+  const payload = RecurringPayloadV1.unpack(recurringPayloadBytes);
   const policyScriptHash = parseHash32(scriptToHash(expectedPolicy));
   const payloadHash = hash32FromBytes(
-    deriveRecurringPayloadHash(hash32ToBytes(policyScriptHash), hexToBytes(payloadHex)),
+    usesOperatorPolicy
+      ? deriveOperatorPayloadHash(hash32ToBytes(policyScriptHash), committedPayload)
+      : deriveRecurringPayloadHash(hash32ToBytes(policyScriptHash), committedPayload),
   );
   const jobPolicyHash = hash32FromBytes(Uint8Array.from(job.policy_script_hash));
   const jobPayloadHash = hash32FromBytes(Uint8Array.from(job.payload_hash));
@@ -455,7 +552,10 @@ export function reconstructRecurringDisplayIntent(
     ownerLockHash !== hash32FromBytes(Uint8Array.from(job.cancel_lock_hash)) ||
     reward !== BigInt(job.reward.toString()) ||
     firstNotBefore !== BigInt(job.not_before.toString()) ||
-    BigInt(job.not_after.toString()) !== 0n ||
+    (usesOperatorPolicy
+      ? operatorTakeoverBlock(firstNotBefore, operatorPayload!.selection.takeoverDelayBlocks) !==
+        BigInt(job.not_after.toString())
+      : BigInt(job.not_after.toString()) !== 0n) ||
     totalRuns !== BigInt(job.remaining_runs.toString()) ||
     remainingBudget !== BigInt(job.remaining_budget.toString()) ||
     BigInt(output.capacity) !== CONTRACT_CAPACITY.jobCellV1 + remainingBudget
@@ -475,5 +575,11 @@ export function reconstructRecurringDisplayIntent(
     finalRefund: "owner",
     policyScriptHash,
     payloadHash,
+    ...(operatorPayload === undefined
+      ? {}
+      : {
+          preferredExecutorLockHash: operatorPayload.selection.preferredExecutorLockHash,
+          takeoverBlock: BigInt(job.not_after.toString()).toString(),
+        }),
   });
 }

@@ -4,6 +4,28 @@ export * from "./dao-harvest-v2-builders.ts";
 export * from "./dao-harvest-v2-transitions.ts";
 
 export {
+  DEFAULT_OPERATOR_TAKEOVER_DELAY_BLOCKS,
+  OPERATOR_PAYLOAD_DOMAIN,
+  OPERATOR_PAYLOAD_VERSION,
+  deriveOperatorPayloadHash,
+  normalizeOperatorSelection,
+  operatorTakeoverBlock,
+  packOperatorPayload,
+  unpackOperatorPayload,
+  type OperatorSelection,
+} from "./operator-selection.ts";
+
+export type {
+  OperatorAutomationDeployment,
+  OperatorContractDeployment,
+} from "./operator-deployment.ts";
+
+export {
+  parseOperatorAutomationManifest,
+  type OperatorAutomationManifest,
+} from "./operator-automation-manifest.ts";
+
+export {
   validateSdkConformanceFixture,
   type SdkConformanceCaseResult,
   type SdkConformanceResult,

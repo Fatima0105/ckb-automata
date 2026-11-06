@@ -15,6 +15,7 @@ import {
   CONTRACT_CAPACITY,
   deriveAbsoluteBlockTriggerHash,
   deriveRecurringPayloadHash,
+  deriveOperatorPayloadHash,
   hash32FromBytes,
   hash32ToBytes,
   isValidRecurringSchedule,
@@ -23,11 +24,14 @@ import {
   parseHash32,
   parseRunCount,
   parseShannons,
+  operatorTakeoverBlock,
   toRpcHex,
   type Hash32,
   type ScriptIdentity,
+  type SinceValue,
   type Shannons,
   type UnsignedDeadlineTransaction,
+  unpackOperatorPayload,
 } from "@ckb-automata/core";
 
 import {
@@ -96,12 +100,14 @@ export interface RecurringInspection {
   readonly executorLockHash: Hash32;
   readonly amount: Shannons;
   readonly final: boolean;
+  readonly operatorSelection?: ReturnType<typeof unpackOperatorPayload>["selection"];
 }
 
 export interface RecurringEvidence {
   readonly scheduledBlock: bigint;
   readonly observedTip: bigint;
   readonly sequence: bigint;
+  readonly executionSince?: SinceValue;
 }
 
 function stable(value: unknown): string {
@@ -162,8 +168,15 @@ function resolvePayload(context: ExecutorContext): { payload: RecurringPayloadV1
   for (const hex of new Set(context.snapshot.payloads)) {
     try {
       const bytes = hexToBytes(hex);
-      if (hash32FromBytes(deriveRecurringPayloadHash(policyHash, bytes)) !== expectedHash) continue;
-      matches.push({ payload: RecurringPayloadV1.unpack(bytes), hex });
+      const operatorBound =
+        context.jobInspection.policy.kind === "recurring" &&
+        context.jobInspection.policy.contract === "recurring-policy-v2";
+      const committedHash = operatorBound
+        ? deriveOperatorPayloadHash(policyHash, bytes)
+        : deriveRecurringPayloadHash(policyHash, bytes);
+      if (hash32FromBytes(committedHash) !== expectedHash) continue;
+      const application = operatorBound ? unpackOperatorPayload(bytes).applicationPayload : bytes;
+      matches.push({ payload: RecurringPayloadV1.unpack(application), hex });
     } catch {
       // Malformed and non-matching candidates are not evidence for this job.
     }
@@ -184,12 +197,21 @@ function inspectRecurring(context: ExecutorContext): RecurringInspection {
       "recurring adapter received another policy",
     );
   }
+  const operatorBound = context.jobInspection.policy.contract === "recurring-policy-v2";
+  const operatorDeployment = context.snapshot.operatorDeployment;
+  if (operatorBound && operatorDeployment === undefined) {
+    throw new RecurringAdapterError("INVALID_RECURRING_JOB", "operator deployment is unavailable");
+  }
   const expectedJobLock = {
-    ...context.snapshot.deployment.contracts["job-lock"].script,
+    ...(operatorBound
+      ? operatorDeployment!.contracts.jobLock.script
+      : context.snapshot.deployment.contracts["job-lock"].script),
     args: "0x" as const,
   };
   const expectedPolicy = {
-    ...context.snapshot.deployment.contracts["recurring-policy"].script,
+    ...(operatorBound
+      ? operatorDeployment!.contracts.recurringPolicy.script
+      : context.snapshot.deployment.contracts["recurring-policy"].script),
     args: "0x" as const,
   };
   if (
@@ -203,6 +225,9 @@ function inspectRecurring(context: ExecutorContext): RecurringInspection {
   }
 
   const resolved = resolvePayload(context);
+  const operatorPayload = operatorBound
+    ? unpackOperatorPayload(hexToBytes(resolved.hex))
+    : undefined;
   const payload = resolved.payload;
   const amount = parseShannons(payload.amount.toString());
   const interval = parseBlockNumber(payload.interval_blocks.toString());
@@ -228,7 +253,10 @@ function inspectRecurring(context: ExecutorContext): RecurringInspection {
     reward !== job.reward ||
     ownerHash !== job.cancelLockHash ||
     job.trigger.kind !== ABSOLUTE_BLOCK_TRIGGER_KIND ||
-    job.notAfter !== 0n ||
+    (operatorPayload === undefined
+      ? job.notAfter !== 0n
+      : job.notAfter !==
+        operatorTakeoverBlock(job.notBefore, operatorPayload.selection.takeoverDelayBlocks)) ||
     job.sequence + job.remainingRuns !== totalRuns ||
     BigInt(job.notBefore) !== BigInt(scheduled) ||
     job.trigger.paramsHash !== expectedTrigger ||
@@ -271,6 +299,7 @@ function inspectRecurring(context: ExecutorContext): RecurringInspection {
     executorLockHash,
     amount,
     final: job.remainingRuns === 1n,
+    ...(operatorPayload === undefined ? {} : { operatorSelection: operatorPayload.selection }),
   });
 }
 
@@ -295,7 +324,11 @@ function plainOutput(capacity: Shannons, lock: ScriptIdentity) {
   return Object.freeze({ capacity: toRpcHex(capacity), lock, type: null });
 }
 
-function buildRecurring(context: ExecutorContext, inspection: RecurringInspection): ExecutorBuild {
+function buildRecurring(
+  context: ExecutorContext,
+  inspection: RecurringInspection,
+  executionSince = context.jobInspection.job.notBefore,
+): ExecutorBuild {
   const job = context.jobInspection.job;
   const reward = parseShannons(job.reward);
   const consumed = parseShannons(reward + inspection.amount);
@@ -333,6 +366,13 @@ function buildRecurring(context: ExecutorContext, inspection: RecurringInspectio
         trigger_params_hash: [...deriveAbsoluteBlockTriggerHash(notBefore)],
         remaining_budget: remainingBudget.toString(),
         not_before: notBefore.toString(),
+        not_after:
+          inspection.operatorSelection === undefined
+            ? "0"
+            : operatorTakeoverBlock(
+                notBefore,
+                inspection.operatorSelection.takeoverDelayBlocks,
+              ).toString(),
         remaining_runs: Number(remainingRuns),
       }),
     ) as Hex;
@@ -351,14 +391,20 @@ function buildRecurring(context: ExecutorContext, inspection: RecurringInspectio
   const transaction: UnsignedDeadlineTransaction = Object.freeze({
     version: "0x0",
     cellDeps: Object.freeze([
-      context.snapshot.deployment.manifest.secp256k1Blake160.cellDep,
-      context.snapshot.deployment.contracts["job-lock"].cellDep,
-      context.snapshot.deployment.contracts["recurring-policy"].cellDep,
+      inspection.operatorSelection === undefined
+        ? context.snapshot.deployment.manifest.secp256k1Blake160.cellDep
+        : context.snapshot.operatorDeployment!.secp256k1Blake160.cellDep,
+      inspection.operatorSelection === undefined
+        ? context.snapshot.deployment.contracts["job-lock"].cellDep
+        : context.snapshot.operatorDeployment!.contracts.jobLock.cellDep,
+      inspection.operatorSelection === undefined
+        ? context.snapshot.deployment.contracts["recurring-policy"].cellDep
+        : context.snapshot.operatorDeployment!.contracts.recurringPolicy.cellDep,
     ]),
     headerDeps: Object.freeze([]),
     inputs: Object.freeze([
       Object.freeze({
-        since: toRpcHex(job.notBefore),
+        since: toRpcHex(executionSince),
         previousOutput: Object.freeze({
           txHash: context.snapshot.job.outPoint.txHash,
           index: toRpcHex(context.snapshot.job.outPoint.index),
@@ -400,10 +446,31 @@ export const RECURRING_EXECUTOR_ADAPTER = defineExecutorAdapter<
 >({
   registration: RECURRING_EXECUTOR_REGISTRATION,
   inspect: inspectRecurring,
-  eligibility: evaluateRecurringEligibility,
-  build: (context, inspection) => buildRecurring(context, inspection),
-  verifyBuilt: (context, inspection, _eligibility, build) => {
-    const expected = buildRecurring(context, inspection);
+  eligibility: (context, inspection) => {
+    const base = evaluateRecurringEligibility(context);
+    if (base.status === "ineligible" || inspection.operatorSelection === undefined) return base;
+    const executor = scriptHash(context.identity.rewardLock);
+    const preferred = inspection.operatorSelection.preferredExecutorLockHash;
+    const executionSince =
+      executor === preferred
+        ? context.jobInspection.job.notBefore
+        : context.jobInspection.job.notAfter;
+    return context.snapshot.tip.number >= executionSince
+      ? Object.freeze({
+          status: "eligible" as const,
+          evidence: { ...base.evidence, executionSince },
+        })
+      : Object.freeze({
+          status: "ineligible" as const,
+          reason: "EXECUTOR_NOT_YET_ELIGIBLE" as const,
+          terminal: false,
+          evidence: { ...base.evidence, executionSince },
+        });
+  },
+  build: (context, inspection, eligibility) =>
+    buildRecurring(context, inspection, eligibility.evidence.executionSince),
+  verifyBuilt: (context, inspection, eligibility, build) => {
+    const expected = buildRecurring(context, inspection, eligibility.evidence.executionSince);
     return stable(build) === stable(expected)
       ? Object.freeze({ status: "valid" })
       : Object.freeze({

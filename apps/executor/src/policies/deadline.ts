@@ -10,11 +10,13 @@ import {
   CAMPAIGN_STATES,
   CONTRACT_CAPACITY,
   deriveDeadlinePayloadHash,
+  deriveOperatorPayloadHash,
   deriveRefundCommitment,
   determineCampaignOutcome,
   hash32FromBytes,
   hash32ToBytes,
   minimumPlainCellCapacity,
+  operatorTakeoverBlock,
   parseHash32,
   parseOutPoint,
   parseShannons,
@@ -22,8 +24,10 @@ import {
   type Hash32,
   type OutPoint,
   type ScriptIdentity,
+  type SinceValue,
   type Shannons,
   type UnsignedDeadlineTransaction,
+  unpackOperatorPayload,
 } from "@ckb-automata/core";
 
 import {
@@ -99,11 +103,14 @@ export interface DeadlineInspection {
   readonly refundRecordsHex: Hex;
   readonly feeCell: ExecutorCellSnapshot;
   readonly executorLockHash: Hash32;
+  readonly operatorPayloadHex?: Hex;
+  readonly operatorSelection?: ReturnType<typeof unpackOperatorPayload>["selection"];
 }
 
 export interface DeadlineEvidence {
   readonly deadline: bigint;
   readonly observedTip: bigint;
+  readonly executionSince?: SinceValue;
 }
 
 function stable(value: unknown): string {
@@ -266,7 +273,7 @@ function selectFeeCell(context: ExecutorContext): ExecutorCellSnapshot {
   return candidates[0]!;
 }
 
-function executionWitness(executorLockHash: Hash32): Hex {
+function executionWitness(executorLockHash: Hash32, operatorPayload?: Hex): Hex {
   const request = new Uint8Array(46);
   const view = new DataView(request.buffer);
   request[0] = EXECUTION_MODE;
@@ -278,7 +285,7 @@ function executionWitness(executorLockHash: Hash32): Hex {
   return serializeWitnessArgs({
     lock: "",
     inputType: bytesToHex(request),
-    outputType: "",
+    outputType: operatorPayload ?? "",
   }) as Hex;
 }
 
@@ -291,8 +298,15 @@ function inspectDeadline(context: ExecutorContext): DeadlineInspection {
     throw new DeadlineAdapterError("INVALID_CAMPAIGN", "deadline adapter received another policy");
   }
   const campaignTypeHash = context.jobInspection.policy.campaignTypeHash;
+  const operatorBound = context.jobInspection.policy.contract === "deadline-policy-v2";
+  const operatorDeployment = context.snapshot.operatorDeployment;
+  if (operatorBound && operatorDeployment === undefined) {
+    throw new DeadlineAdapterError("INVALID_CAMPAIGN", "operator deployment is unavailable");
+  }
   const expectedJobLock = {
-    ...context.snapshot.deployment.contracts["job-lock"].script,
+    ...(operatorBound
+      ? operatorDeployment!.contracts.jobLock.script
+      : context.snapshot.deployment.contracts["job-lock"].script),
     args: "0x" as const,
   };
   if (stable(context.snapshot.job.output.lock) !== stable(expectedJobLock)) {
@@ -335,9 +349,40 @@ function inspectDeadline(context: ExecutorContext): DeadlineInspection {
       "campaign input does not use its identity-bound registered type and lock scripts",
     );
   }
-  const expectedPayload = hash32FromBytes(
-    deriveDeadlinePayloadHash(context.jobInspection.job.policyScriptHash, campaignTypeHash),
-  );
+  const operatorCandidates = operatorBound
+    ? [...new Set(context.snapshot.payloads)].flatMap((hex) => {
+        try {
+          const bytes = hexToBytes(hex);
+          const unpacked = unpackOperatorPayload(bytes);
+          const application = unpacked.applicationPayload;
+          return hash32FromBytes(
+            deriveOperatorPayloadHash(
+              hash32ToBytes(context.jobInspection.job.policyScriptHash),
+              bytes,
+            ),
+          ) === context.jobInspection.job.payloadHash &&
+            application.length === 33 &&
+            application[0] === 1 &&
+            hash32FromBytes(application.slice(1)) === campaignTypeHash
+            ? [{ hex, unpacked }]
+            : [];
+        } catch {
+          return [];
+        }
+      })
+    : [];
+  if (operatorBound && operatorCandidates.length !== 1) {
+    throw new DeadlineAdapterError(
+      "INVALID_COMMITMENT",
+      "the snapshot must resolve one operator policy matching the deadline job",
+    );
+  }
+  const operatorPayload = operatorCandidates[0];
+  const expectedPayload = operatorBound
+    ? context.jobInspection.job.payloadHash
+    : hash32FromBytes(
+        deriveDeadlinePayloadHash(context.jobInspection.job.policyScriptHash, campaignTypeHash),
+      );
   if (expectedPayload !== context.jobInspection.job.payloadHash) {
     throw new DeadlineAdapterError(
       "INVALID_COMMITMENT",
@@ -376,6 +421,12 @@ function inspectDeadline(context: ExecutorContext): DeadlineInspection {
     refundRecordsHex: refunds.payload,
     feeCell: selectFeeCell(context),
     executorLockHash,
+    ...(operatorPayload === undefined
+      ? {}
+      : {
+          operatorPayloadHex: operatorPayload.hex,
+          operatorSelection: operatorPayload.unpacked.selection,
+        }),
   });
 }
 
@@ -389,7 +440,11 @@ function terminalData(inspection: DeadlineInspection): Hex {
   ) as Hex;
 }
 
-function buildDeadline(context: ExecutorContext, inspection: DeadlineInspection): ExecutorBuild {
+function buildDeadline(
+  context: ExecutorContext,
+  inspection: DeadlineInspection,
+  executionSince = context.jobInspection.job.notBefore,
+): ExecutorBuild {
   const reward = parseShannons(context.jobInspection.job.reward);
   const jobCapacity = parseShannons(context.snapshot.job.output.capacity);
   const ownerRefund = parseShannons(jobCapacity - reward);
@@ -439,20 +494,25 @@ function buildDeadline(context: ExecutorContext, inspection: DeadlineInspection)
     plainOutput(feeChange, context.identity.rewardLock),
   );
   outputsData.push(terminalData(inspection), "0x");
-  const deadline = context.jobInspection.job.notBefore;
   const transaction: UnsignedDeadlineTransaction = Object.freeze({
     version: "0x0",
     cellDeps: Object.freeze([
-      context.snapshot.deployment.manifest.secp256k1Blake160.cellDep,
-      context.snapshot.deployment.contracts["job-lock"].cellDep,
-      context.snapshot.deployment.contracts["deadline-policy"].cellDep,
+      inspection.operatorSelection === undefined
+        ? context.snapshot.deployment.manifest.secp256k1Blake160.cellDep
+        : context.snapshot.operatorDeployment!.secp256k1Blake160.cellDep,
+      inspection.operatorSelection === undefined
+        ? context.snapshot.deployment.contracts["job-lock"].cellDep
+        : context.snapshot.operatorDeployment!.contracts.jobLock.cellDep,
+      inspection.operatorSelection === undefined
+        ? context.snapshot.deployment.contracts["deadline-policy"].cellDep
+        : context.snapshot.operatorDeployment!.contracts.deadlinePolicy.cellDep,
       context.snapshot.deployment.contracts["demo-campaign-type"].cellDep,
       context.snapshot.deployment.contracts["campaign-lock"].cellDep,
     ]),
     headerDeps: Object.freeze([]),
     inputs: Object.freeze([
       Object.freeze({
-        since: toRpcHex(deadline),
+        since: toRpcHex(executionSince),
         previousOutput: Object.freeze({
           txHash: context.snapshot.job.outPoint.txHash,
           index: toRpcHex(context.snapshot.job.outPoint.index),
@@ -476,7 +536,7 @@ function buildDeadline(context: ExecutorContext, inspection: DeadlineInspection)
     outputs: Object.freeze(outputs),
     outputsData: Object.freeze(outputsData),
     witnesses: Object.freeze([
-      executionWitness(inspection.executorLockHash),
+      executionWitness(inspection.executorLockHash, inspection.operatorPayloadHex),
       "0x" as Hex,
       serializeWitnessArgs({
         lock: "",
@@ -504,10 +564,40 @@ export const DEADLINE_EXECUTOR_ADAPTER = defineExecutorAdapter<
 >({
   registration: DEADLINE_EXECUTOR_REGISTRATION,
   inspect: inspectDeadline,
-  eligibility: evaluateDeadlineEligibility,
-  build: (context, inspection) => buildDeadline(context, inspection),
-  verifyBuilt: (context, inspection, _eligibility, build) => {
-    const expected = buildDeadline(context, inspection);
+  eligibility: (context, inspection) => {
+    const base = evaluateDeadlineEligibility(context);
+    if (base.status === "ineligible" || inspection.operatorSelection === undefined) return base;
+    const executor = scriptHash(context.identity.rewardLock);
+    const preferred = inspection.operatorSelection.preferredExecutorLockHash;
+    const executionSince =
+      executor === preferred
+        ? context.jobInspection.job.notBefore
+        : context.jobInspection.job.notAfter;
+    if (
+      context.jobInspection.job.notAfter !==
+      operatorTakeoverBlock(
+        context.jobInspection.job.notBefore,
+        inspection.operatorSelection.takeoverDelayBlocks,
+      )
+    ) {
+      throw new DeadlineAdapterError("INVALID_COMMITMENT", "deadline takeover block is invalid");
+    }
+    return context.snapshot.tip.number >= executionSince
+      ? Object.freeze({
+          status: "eligible" as const,
+          evidence: { ...base.evidence, executionSince },
+        })
+      : Object.freeze({
+          status: "ineligible" as const,
+          reason: "EXECUTOR_NOT_YET_ELIGIBLE" as const,
+          terminal: false,
+          evidence: { ...base.evidence, executionSince },
+        });
+  },
+  build: (context, inspection, eligibility) =>
+    buildDeadline(context, inspection, eligibility.evidence.executionSince),
+  verifyBuilt: (context, inspection, eligibility, build) => {
+    const expected = buildDeadline(context, inspection, eligibility.evidence.executionSince);
     return stable(build) === stable(expected)
       ? Object.freeze({ status: "valid" })
       : Object.freeze({

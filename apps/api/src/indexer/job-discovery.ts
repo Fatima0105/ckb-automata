@@ -11,6 +11,7 @@ import {
   type BlockNumber,
   type Hash32,
   type OutputIndex,
+  type OperatorAutomationDeployment,
   type RegisteredDeployment,
   type Sequence,
   type Shannons,
@@ -59,12 +60,17 @@ export interface JobDiscoveryResult extends JobCellExtraction {
 function exactJobLock(
   output: ClientBlock["transactions"][number]["outputs"][number],
   deployment: RegisteredDeployment,
+  operatorDeployment?: OperatorAutomationDeployment,
 ): boolean {
-  const expected = deployment.contracts["job-lock"].script;
-  return (
-    output.lock.codeHash === expected.codeHash &&
-    output.lock.hashType === expected.hashType &&
-    output.lock.args === "0x"
+  const expected = [
+    deployment.contracts["job-lock"].script,
+    ...(operatorDeployment === undefined ? [] : [operatorDeployment.contracts.jobLock.script]),
+  ];
+  return expected.some(
+    (script) =>
+      output.lock.codeHash === script.codeHash &&
+      output.lock.hashType === script.hashType &&
+      output.lock.args === "0x",
   );
 }
 
@@ -86,6 +92,7 @@ function dataBuffer(value: `0x${string}`): Buffer {
 export function extractSupportedJobCells(
   block: ClientBlock,
   deployment: RegisteredDeployment,
+  operatorDeployment?: OperatorAutomationDeployment,
 ): JobCellExtraction {
   const cells: DiscoveredJobCell[] = [];
   let jobLockOutputs = 0;
@@ -100,13 +107,14 @@ export function extractSupportedJobCells(
     const txHash = parseHash32(transaction.hash());
     const transactionIndex = parseOutputIndex(BigInt(transactionIndexValue));
     for (const [outputIndexValue, output] of transaction.outputs.entries()) {
-      if (!exactJobLock(output, deployment)) continue;
+      if (!exactJobLock(output, deployment, operatorDeployment)) continue;
       jobLockOutputs += 1;
       const data = transaction.outputsData[outputIndexValue] ?? "0x";
       const inspection = inspectJobData(data, {
         manifest: deployment.manifest,
         expectedGenesisHash: deployment.genesisHash,
         ...(output.type ? { policyScript: output.type } : {}),
+        ...(operatorDeployment === undefined ? {} : { operatorDeployment }),
       });
       if (inspection.status === "unsupported_version") {
         unsupportedVersions += 1;
@@ -159,10 +167,16 @@ export function extractSupportedJobCells(
 export class JobCellDiscovery {
   readonly #database: AutomataDatabase;
   readonly #ckbClient: Pick<CkbReadClient, "getBlockByNumber">;
+  readonly #operatorDeployment: OperatorAutomationDeployment | undefined;
 
-  constructor(database: AutomataDatabase, ckbClient: Pick<CkbReadClient, "getBlockByNumber">) {
+  constructor(
+    database: AutomataDatabase,
+    ckbClient: Pick<CkbReadClient, "getBlockByNumber">,
+    operatorDeployment?: OperatorAutomationDeployment,
+  ) {
     this.#database = database;
     this.#ckbClient = ckbClient;
+    this.#operatorDeployment = operatorDeployment;
   }
 
   async scanBlock(
@@ -182,7 +196,7 @@ export class JobCellDiscovery {
     block: ClientBlock,
     deployment: RegisteredDeployment,
   ): Promise<JobDiscoveryResult> {
-    const extraction = extractSupportedJobCells(block, deployment);
+    const extraction = extractSupportedJobCells(block, deployment, this.#operatorDeployment);
     let insertedJobs = 0;
     let existingJobs = 0;
 

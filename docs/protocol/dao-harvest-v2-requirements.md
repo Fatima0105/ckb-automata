@@ -70,6 +70,8 @@ make execution unattractive, but it cannot make an otherwise valid mature owner 
 - Every automated claim consumes exactly one and recreates exactly one.
 - Its successor capacity increases by exactly net compensation.
 - Its lock, Job ID, payout commitment, policy commitment, and seed never change automatically.
+- Owner-authorized operator rotation recreates it at identical capacity with only the payload-hash
+  binding changed to the reviewed successor payload.
 - A sweep recreates it with exactly the seed and sends the accumulated value to the payout lock.
 - A terminal close creates no successor and returns all value under the committed owner/payout rules.
 - No executor can use the Compensation Cell as a fee input or reward source.
@@ -168,6 +170,9 @@ claim that a broadcast transaction can be cancelled.
 - Indexers, executors, API responses, UI, and recovery tooling route by exact script identity.
 - No automatic migration is allowed.
 - Any V1-to-V2 move requires a new owner-reviewed and owner-signed transaction.
+
+The exact V2 bytes, operation codes, hash domains, witness indices, and error allocation are frozen
+in [`dao-harvest-v2-wire-format.md`](./dao-harvest-v2-wire-format.md).
 
 ## Normative decisions
 

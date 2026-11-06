@@ -32,6 +32,7 @@ import { SimulationGateService } from "./simulation.ts";
 import { PostgresSimulationStore } from "./simulation-store.ts";
 import { SimulationCoordinator } from "./simulation-worker.ts";
 import { operatorLockArgs } from "./signing.ts";
+import { loadOperatorAutomationDeployment } from "./operator-automation-manifest.ts";
 import { PostgresSubmissionStore } from "./submission-store.ts";
 import { SubmissionService } from "./submission.ts";
 
@@ -201,6 +202,16 @@ export function createExecutorModule(
                   runtime,
                   rewardLock,
                   resolutions: store,
+                  loadOperatorDeployment: async () => {
+                    const path = configured.OPERATOR_AUTOMATION_MANIFEST_PATH;
+                    return path === undefined
+                      ? undefined
+                      : loadOperatorAutomationDeployment(
+                          path,
+                          runtime,
+                          configured.CKB_GENESIS_HASH,
+                        );
+                  },
                 }),
                 store,
                 redisUrl: configured.REDIS_URL,

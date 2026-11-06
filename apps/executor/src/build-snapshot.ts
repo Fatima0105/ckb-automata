@@ -10,6 +10,7 @@ import {
   parseShannons,
   registeredDaoHarvestDeployment,
   type RegisteredDeployment,
+  type OperatorAutomationDeployment,
   type ScriptIdentity,
 } from "@ckb-automata/core";
 
@@ -98,6 +99,22 @@ function committed(response: ClientTransactionResponse | undefined): ClientTrans
   return response;
 }
 
+function witnessTypePayloads(response: ClientTransactionResponse): readonly `0x${string}`[] {
+  const payloads: `0x${string}`[] = [];
+  for (const witness of response.transaction.witnesses) {
+    try {
+      const decoded = WitnessArgs.fromBytes(witness);
+      const inputType = decoded.inputType;
+      const outputType = decoded.outputType;
+      if (inputType) payloads.push(inputType.toString() as `0x${string}`);
+      if (outputType) payloads.push(outputType.toString() as `0x${string}`);
+    } catch {
+      // Other inputs may use unrelated witness layouts.
+    }
+  }
+  return payloads;
+}
+
 function outputTypePayloads(response: ClientTransactionResponse): readonly `0x${string}`[] {
   const payloads: `0x${string}`[] = [];
   for (const witness of response.transaction.witnesses) {
@@ -136,20 +153,33 @@ export class ChainBuildSnapshotSource implements BuildSnapshotSource {
   readonly #runtime: ExecutorRuntime;
   readonly #rewardLock: ScriptIdentity;
   readonly #resolutions: LockResolutionSource;
+  readonly #operatorDeployment: OperatorAutomationDeployment | undefined;
+  readonly #loadOperatorDeployment:
+    (() => Promise<OperatorAutomationDeployment | undefined>) | undefined;
+  #operatorDeploymentPromise: Promise<OperatorAutomationDeployment | undefined> | undefined;
 
   constructor(options: {
     readonly deployment: RegisteredDeployment;
     readonly runtime: ExecutorRuntime;
     readonly rewardLock: ScriptIdentity;
     readonly resolutions: LockResolutionSource;
+    readonly operatorDeployment?: OperatorAutomationDeployment;
+    readonly loadOperatorDeployment?: () => Promise<OperatorAutomationDeployment | undefined>;
   }) {
     this.#deployment = options.deployment;
     this.#runtime = options.runtime;
     this.#rewardLock = options.rewardLock;
     this.#resolutions = options.resolutions;
+    this.#operatorDeployment = options.operatorDeployment;
+    this.#loadOperatorDeployment = options.loadOperatorDeployment;
   }
 
   async reload(record: EligibilityJobRecord): Promise<ExecutorSnapshot | undefined> {
+    this.#operatorDeploymentPromise ??=
+      this.#operatorDeployment !== undefined
+        ? Promise.resolve(this.#operatorDeployment)
+        : (this.#loadOperatorDeployment?.() ?? Promise.resolve(undefined));
+    const operatorDeployment = await this.#operatorDeploymentPromise;
     const tipBefore = headerSnapshot(await this.#runtime.getTipHeader());
     const liveJob = await this.#runtime.getCellLive(record.outPoint);
     if (!liveJob) return undefined;
@@ -164,6 +194,7 @@ export class ChainBuildSnapshotSource implements BuildSnapshotSource {
       manifest: this.#deployment.manifest,
       expectedGenesisHash: this.#deployment.genesisHash,
       ...(job.output.type === null ? {} : { policyScript: job.output.type }),
+      ...(operatorDeployment === undefined ? {} : { operatorDeployment }),
     });
     if (
       inspected.status !== "ok" ||
@@ -185,7 +216,7 @@ export class ChainBuildSnapshotSource implements BuildSnapshotSource {
     }
 
     const locks = await this.#resolvedLocks(lineage);
-    const payloads = Object.freeze([...new Set(lineage.flatMap(outputTypePayloads))]);
+    const payloads = Object.freeze([...new Set(lineage.flatMap(witnessTypePayloads))]);
     const applicationCells = await this.#applicationCells(lineage, inspected.policy);
     const headers = await this.#headers(applicationCells, inspected.policy);
     const feeCells = await this.#feeCells();
@@ -201,6 +232,7 @@ export class ChainBuildSnapshotSource implements BuildSnapshotSource {
       resolvedLocks: locks,
       payloads,
       claims: Object.freeze({}),
+      ...(operatorDeployment === undefined ? {} : { operatorDeployment }),
     });
   }
 

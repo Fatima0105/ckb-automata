@@ -11,6 +11,8 @@ import {
   parseHash32,
   parseOutPoint,
   parseShannons,
+  toRpcHex,
+  type OperatorAutomationDeployment,
   type RegisteredDeployment,
   type ScriptIdentity,
 } from "@ckb-automata/core";
@@ -35,6 +37,32 @@ function lock(value: RegisteredDeployment, byte: string, argsBytes = 20): Script
   };
 }
 
+function operatorContract(byte: string) {
+  return {
+    script: { codeHash: parseHash32(`0x${byte.repeat(64)}`), hashType: "data1" as const },
+    cellDep: {
+      outPoint: { txHash: parseHash32(`0x${byte.repeat(64)}`), index: "0x0" as const },
+      depType: "code" as const,
+    },
+    binarySha256: byte.repeat(64),
+    sizeBytes: 1,
+  };
+}
+
+function operatorDeployment(value: RegisteredDeployment): OperatorAutomationDeployment {
+  return {
+    genesisHash: value.genesisHash,
+    manifestSha256: "a".repeat(64),
+    secp256k1Blake160: value.manifest.secp256k1Blake160,
+    contracts: {
+      jobLock: operatorContract("a"),
+      deadlinePolicy: operatorContract("b"),
+      recurringPolicy: operatorContract("c"),
+    },
+    defaultPreferredOperatorLockHash: parseHash32(`0x${"33".repeat(32)}`),
+  };
+}
+
 function header(number: bigint) {
   return Object.freeze({
     hash: parseHash32(`0x${number.toString(16).padStart(64, "0")}`),
@@ -48,6 +76,7 @@ async function deadlineFixture(
   outcome: "SUCCEEDED" | "REFUNDING",
   pledged = 10_000_000_000n,
   successArgsBytes = 20,
+  operator?: Readonly<{ preferredByte: string; takeoverDelayBlocks: bigint }>,
 ): Promise<{
   readonly snapshot: ExecutorSnapshot;
   readonly executorLock: ScriptIdentity;
@@ -57,6 +86,7 @@ async function deadlineFixture(
   const ownerLock = lock(registered, "11");
   const successLock = lock(registered, "22", successArgsBytes);
   const executorLock = lock(registered, "33");
+  const operatorContracts = operatorDeployment(registered);
   const deadline = 100n;
   const creation = buildDeadlineCreation({
     deployment: registered,
@@ -77,6 +107,17 @@ async function deadlineFixture(
       transactionBytes: { minimum: "700", maximum: "1200" },
       feeRatePerKilobyte: { minimum: "1000", maximum: "2000" },
     },
+    ...(operator === undefined
+      ? {}
+      : {
+          operator: {
+            deployment: operatorContracts,
+            preferredExecutorLockHash: parseHash32(
+              scriptToHash(lock(registered, operator.preferredByte)),
+            ),
+            takeoverDelayBlocks: operator.takeoverDelayBlocks,
+          },
+        }),
   });
   const campaignOutput = creation.transaction.outputs[0];
   const jobOutput = creation.transaction.outputs[1];
@@ -119,8 +160,12 @@ async function deadlineFixture(
       ]),
       headers: Object.freeze([createdAt]),
       resolvedLocks: Object.freeze([ownerLock, successLock]),
-      payloads: Object.freeze([creation.intent.pledgeRecords]),
+      payloads: Object.freeze([
+        creation.intent.pledgeRecords,
+        ...(creation.intent.operatorPayload === undefined ? [] : [creation.intent.operatorPayload]),
+      ]),
       claims: Object.freeze({}),
+      ...(operator === undefined ? {} : { operatorDeployment: operatorContracts }),
     }),
   };
 }
@@ -180,6 +225,35 @@ test("deadline adapter stops before building until the committed block", async (
   if (result.status === "ineligible") {
     assert.equal(result.eligibility.reason, "EXECUTOR_NOT_YET_ELIGIBLE");
   }
+});
+
+test("operator-bound deadline gives the preferred executor the first window", async () => {
+  const preferred = await deadlineFixture("SUCCEEDED", 10_000_000_000n, 20, {
+    preferredByte: "33",
+    takeoverDelayBlocks: 12n,
+  });
+  const preferredResult = await execute(preferred);
+  assert.equal(preferredResult.status, "built");
+  if (preferredResult.status !== "built") return;
+  assert.equal(
+    preferredResult.build.transaction.inputs[0]?.since,
+    toRpcHex(parseBlockNumber(100n)),
+  );
+
+  const fallback = await deadlineFixture("SUCCEEDED", 10_000_000_000n, 20, {
+    preferredByte: "44",
+    takeoverDelayBlocks: 12n,
+  });
+  const waiting = await execute(fallback);
+  assert.equal(waiting.status, "ineligible");
+
+  const takeover = await execute({
+    ...fallback,
+    snapshot: { ...fallback.snapshot, tip: header(112n) },
+  });
+  assert.equal(takeover.status, "built");
+  if (takeover.status !== "built") return;
+  assert.equal(takeover.build.transaction.inputs[0]?.since, toRpcHex(parseBlockNumber(112n)));
 });
 
 test("deadline adapter rejects contradicted claims and uncommitted refund data", async () => {

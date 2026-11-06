@@ -5,6 +5,11 @@ measured Job Cell occupancy plus every scheduled payout and executor reward.
 The Job Lock has empty args, and the type script is the verified recurring
 policy deployment with empty V1 args.
 
+New operator-bound creations use `job-lock-v3`, `recurring-policy-v2`, and the
+[`OperatorPayloadV1` selection envelope](operator-selection-v1.md). Each successor advances the
+preferred execution block and takeover block from the immutable schedule. Existing V1 jobs remain
+valid and continue on their original scripts.
+
 The canonical `RecurringPayloadV1` bytes bind the owner, recipient, payout,
 block interval, first eligible block, run count, reward, and owner-only final
 refund. They are stored in witness 0 `output_type`, and their policy-separated

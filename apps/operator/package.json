@@ -1,8 +1,8 @@
 {
   "name": "@ckb-automata/operator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Standalone public-RPC operator for CKAutomata DAO Harvest V2",
+  "description": "Standalone public-RPC operator for CKAutomata payment automation and DAO Harvest",
   "type": "module",
   "bin": {
     "ckb-automata-operator": "dist/cli.js"
@@ -23,8 +23,10 @@
   "dependencies": {
     "@ckb-automata/ccc": "workspace:*",
     "@ckb-automata/core": "workspace:*",
+    "@ckb-automata/executor": "workspace:*",
     "@ckb-automata/molecule": "workspace:*",
     "@ckb-automata/telemetry": "workspace:*",
+    "@ckb-ccc/shell": "1.3.13",
     "@nervosnetwork/ckb-sdk-utils": "0.109.5"
   },
   "devDependencies": {

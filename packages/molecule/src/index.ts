@@ -1,6 +1,17 @@
 export const MOLECULE_PACKAGE_READY = true;
 
 export {
+  Byte32 as OperatorByte32,
+  Bytes as OperatorBytes,
+  OPERATOR_V1_SCHEMA_SHA256,
+  OperatorPayloadV1,
+  Uint16 as OperatorUint16,
+  Uint64 as OperatorUint64,
+  type OperatorPayloadV1Like,
+  type OperatorPayloadV1Value,
+} from "./generated/operator_v1.ts";
+
+export {
   Byte32 as CampaignByte32,
   CampaignDataV1,
   CAMPAIGN_V1_SCHEMA_SHA256,

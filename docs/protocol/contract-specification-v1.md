@@ -36,6 +36,7 @@ deployment and integrity-checked manifest revision are published.
 | `RecurringPayloadV1`  | [`recurring_v1.mol`](../../contracts/schemas/recurring_v1.mol)     | `version:u16`, `owner_lock_hash:byte32`, `recipient_lock_hash:byte32`, `amount:u64`, `interval_blocks:u64`, `first_not_before:u64`, `total_runs:u32`, `reward:u64`, `final_refund_kind:u8`                                                                                                                                                  |
 | `CampaignDataV1`      | [`campaign_v1.mol`](../../contracts/schemas/campaign_v1.mol)       | `version:u16`, `state:u8`, `campaign_id:byte32`, `pledged:u64`, `pledge_count:u32`, `target:u64`, `deadline_since:u64`, `success_lock_hash:byte32`, `refund_commitment:byte32`                                                                                                                                                              |
 | `DaoHarvestPayloadV1` | [`dao_harvest_v1.mol`](../../contracts/schemas/dao_harvest_v1.mol) | `version:u16`, `owner_lock_hash:byte32`, `payout_lock_hash:byte32`, `vault_lock_hash:byte32`, `dao_type_hash:byte32`, `principal_capacity:u64`, `prepare_executor_set_hash:byte32`, `executor_reward:u64`, `min_compensation:u64`, `prepare_buffer_epochs:u64`, `confirmation_margin_epochs:u64`, `total_cycles:u32`, `end_epoch_since:u64` |
+| `OperatorPayloadV1`   | [`operator_v1.mol`](../../contracts/schemas/operator_v1.mol)       | `version:u16`, `preferred_executor_lock_hash:byte32`, `takeover_delay_blocks:u64`, `application_payload:bytes`                                                                                                                                                                                                                              |
 
 The generated Rust and TypeScript bindings and the JSON fixtures under
 `contracts/fixtures` are checked representations of these sources. See
@@ -44,6 +45,10 @@ The generated Rust and TypeScript bindings and the JSON fixtures under
 [`campaign-state-v1.md`](campaign-state-v1.md) for deployed field semantics. See
 [`dao-harvest-v1.md`](dao-harvest-v1.md) for the Harvest payload and
 transaction layouts.
+
+The versioned scheduled and recurring operator-selection extension is documented in
+[`operator-selection-v1.md`](operator-selection-v1.md). It uses `job-lock-v3`,
+`deadline-policy-v2`, and `recurring-policy-v2` without changing existing V1 jobs.
 
 ## Witness Envelopes
 

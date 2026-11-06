@@ -4,6 +4,11 @@ This V1 builder creates the legacy conditional deadline form: a campaign-backed
 pay-or-refund outcome. It is not the long-term direct scheduled-payment policy.
 See [ADR 0008](../architecture/0008-separate-plain-payments-from-campaigns.md).
 
+New operator-bound creations use `job-lock-v3`, `deadline-policy-v2`, and the
+[`OperatorPayloadV1` selection envelope](operator-selection-v1.md). The campaign rules and payout
+commitments remain unchanged; only executor priority and delayed takeover are added. Existing V1
+jobs continue to use this documented legacy path.
+
 The deadline builder returns one normalized intent and an unsigned CKB
 transaction whose first two outputs are immutable:
 

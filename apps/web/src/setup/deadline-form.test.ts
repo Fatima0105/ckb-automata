@@ -115,6 +115,30 @@ test("deadline form uses the larger recipient or refund address minimum", async 
   );
 });
 
+test("deadline form validates a custom preferred operator address", async () => {
+  const errors = await validateDeadlineStep(
+    "details",
+    {
+      pledgeCkb: "80",
+      outcome: "success",
+      successAddress: "recipient",
+      refundAddress: "refund",
+      operatorMode: "custom",
+      preferredOperatorAddress: "invalid-operator",
+    },
+    {
+      ownerLockHash: `0x${"55".repeat(32)}`,
+      resolveLock: async () => STANDARD_LOCK,
+      resolveLockHash: async (address) => {
+        if (address === "invalid-operator") throw new Error("invalid address");
+        return address === "recipient" ? `0x${"33".repeat(32)}` : `0x${"44".repeat(32)}`;
+      },
+      walletReady: true,
+    },
+  );
+  assert.equal(errors["preferredOperatorAddress"], "Enter a valid CKB testnet operator address.");
+});
+
 test("deadline client rejects every invalid API fixture", async () => {
   const fixture = JSON.parse(
     await readFile(

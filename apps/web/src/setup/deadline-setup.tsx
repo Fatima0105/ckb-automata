@@ -14,6 +14,7 @@ import {
 } from "./deadline-form.ts";
 import { DEADLINE_SETUP_STEPS } from "./setup-flow.ts";
 import type { SetupStepRenderContext } from "./setup-stepper.tsx";
+import { OperatorSelectionFields } from "./operator-selection-fields.tsx";
 import { SetupStepper } from "./setup-stepper.tsx";
 import {
   CreationReview,
@@ -126,6 +127,7 @@ function DeadlineDetails(context: SetupStepRenderContext) {
           </span>
         )}
       </fieldset>
+      <OperatorSelectionFields context={context} />
     </div>
   );
 }

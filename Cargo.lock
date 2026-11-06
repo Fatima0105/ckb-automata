@@ -94,6 +94,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "automata-deadline-policy-v2"
+version = "0.0.0"
+dependencies = [
+ "ckb-hash",
+ "ckb-std",
+ "molecule",
+]
+
+[[package]]
 name = "automata-demo-campaign-type"
 version = "0.0.0"
 dependencies = [
@@ -138,7 +147,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "automata-job-lock-v3"
+version = "0.0.0"
+dependencies = [
+ "ckb-hash",
+ "ckb-std",
+ "molecule",
+]
+
+[[package]]
 name = "automata-recurring-policy"
+version = "0.0.0"
+dependencies = [
+ "ckb-hash",
+ "ckb-std",
+ "molecule",
+]
+
+[[package]]
+name = "automata-recurring-policy-v2"
 version = "0.0.0"
 dependencies = [
  "ckb-hash",

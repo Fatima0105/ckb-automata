@@ -111,6 +111,25 @@ test("recurring validation uses the resolved recipient address minimum", async (
   );
 });
 
+test("recurring validation requires a valid custom preferred operator", async () => {
+  const errors = await validateRecurringStep(
+    "details",
+    {
+      ...VALID_DRAFT,
+      operatorMode: "custom",
+      preferredOperatorAddress: "invalid-operator",
+    },
+    {
+      ...CONTEXT,
+      resolveLockHash: async (address) => {
+        if (address === "invalid-operator") throw new Error("invalid address");
+        return HASH;
+      },
+    },
+  );
+  assert.equal(errors["preferredOperatorAddress"], "Enter a valid CKB testnet operator address.");
+});
+
 test("recurring client rejects every invalid API fixture", async () => {
   const fixture = JSON.parse(
     await readFile(

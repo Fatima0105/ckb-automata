@@ -1,0 +1,24 @@
+// Shared preferred-operator envelope for scheduled and recurring automation.
+//
+// Integer byte arrays are unsigned little-endian values.
+// version: 1 is OperatorPayloadV1; every other value is reserved.
+// preferred_executor_lock_hash: full Script hash of the operator that may act
+//   at the normal execution lower bound.
+// takeover_delay_blocks: non-zero number of blocks after the normal execution
+//   lower bound when any compatible executor, including the owner, may act.
+// application_payload: canonical bytes interpreted by the committed policy.
+//
+// The complete encoded table is committed by JobDataV1.payload_hash using
+// H("ckb-automata/policy-payload/v1", policy_script_hash || molecule_bytes).
+
+array Uint16 [byte; 2];
+array Uint64 [byte; 8];
+array Byte32 [byte; 32];
+vector Bytes <byte>;
+
+table OperatorPayloadV1 {
+  version: Uint16,
+  preferred_executor_lock_hash: Byte32,
+  takeover_delay_blocks: Uint64,
+  application_payload: Bytes,
+}

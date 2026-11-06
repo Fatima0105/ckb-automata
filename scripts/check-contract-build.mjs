@@ -14,6 +14,9 @@ const binaries = [
   "harvest-vault-lock",
   "dao-harvest-policy",
   "job-lock-v2",
+  "job-lock-v3",
+  "deadline-policy-v2",
+  "recurring-policy-v2",
   "dao-harvest-policy-v2",
   "harvest-vault-lock-v2",
   "compensation-lock-v2",
@@ -28,6 +31,7 @@ const schemaFiles = [
   "recurring_v1.mol",
   "dao_harvest_v1.mol",
   "dao_harvest_v2.mol",
+  "operator_v1.mol",
 ];
 const builderFile = new URL("deploy/docker/contracts-builder.Dockerfile", root);
 const builderTag = `ckb-automata-contracts:${versions.toolchain.rust}`;

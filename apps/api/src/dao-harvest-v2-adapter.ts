@@ -110,6 +110,8 @@ interface SetupRequest {
   readonly payoutLockHash: Hash32;
   readonly principal: bigint;
   readonly totalCycles: number;
+  readonly preferredOperatorLockHash?: Hash32;
+  readonly backupOperatorLockHashes?: readonly Hash32[];
 }
 
 interface OwnerRequest {
@@ -130,6 +132,8 @@ const SETUP_KEYS = [
   "payoutLockHash",
   "principal",
   "totalCycles",
+  "preferredOperatorLockHash",
+  "backupOperatorLockHashes",
 ] as const;
 
 function script(value: unknown, name: string): ScriptIdentity {
@@ -159,7 +163,13 @@ function setupRequest(value: unknown): SetupRequest {
     throw new BadRequestException("DAO harvest setup must be an object");
   }
   const item = value as Record<string, unknown>;
-  if (Object.keys(item).length !== SETUP_KEYS.length || SETUP_KEYS.some((key) => !(key in item))) {
+  const requiredKeys = SETUP_KEYS.filter(
+    (key) => key !== "preferredOperatorLockHash" && key !== "backupOperatorLockHashes",
+  );
+  if (
+    Object.keys(item).some((key) => !SETUP_KEYS.includes(key as (typeof SETUP_KEYS)[number])) ||
+    requiredKeys.some((key) => !(key in item))
+  ) {
     throw new BadRequestException("DAO harvest setup contains unsupported fields");
   }
   try {
@@ -176,6 +186,17 @@ function setupRequest(value: unknown): SetupRequest {
     const principal = parseShannons(item["principal"]);
     const creatorNonce = parseSequence(item["creatorNonce"]);
     const totalCycles = item["totalCycles"];
+    const preferredOperator = item["preferredOperatorLockHash"];
+    const backupOperators = item["backupOperatorLockHashes"];
+    if ((preferredOperator === undefined) !== (backupOperators === undefined)) {
+      throw new TypeError("preferred and backup operators must be selected together");
+    }
+    if (
+      backupOperators !== undefined &&
+      (!Array.isArray(backupOperators) || backupOperators.length < 1 || backupOperators.length > 8)
+    ) {
+      throw new TypeError("backupOperatorLockHashes must contain 1 to 8 lock hashes");
+    }
     if (principal < MINIMUM_PRINCIPAL)
       throw new RangeError("original amount must be at least 242 CKB");
     if (
@@ -194,6 +215,14 @@ function setupRequest(value: unknown): SetupRequest {
       payoutLockHash,
       principal,
       totalCycles: Number(totalCycles),
+      ...(preferredOperator === undefined
+        ? {}
+        : {
+            preferredOperatorLockHash: parseHash32(String(preferredOperator)),
+            backupOperatorLockHashes: Object.freeze(
+              (backupOperators as unknown[]).map((operator) => parseHash32(String(operator))),
+            ),
+          }),
     });
   } catch (error) {
     throw new BadRequestException(error instanceof Error ? error.message : "invalid setup");
@@ -450,7 +479,9 @@ export class DaoHarvestV2TransactionAdapter implements DaoHarvestV2MutationAdapt
     const policyScriptHash = parseHash32(scriptToHash(policy));
     const jobLockHash = parseHash32(scriptToHash(jobLock));
     const daoTypeHash = parseHash32(scriptToHash(daoType));
-    const fallback = deployment.fallbackPrepareOperatorLockHashes.map((value) => hexToBytes(value));
+    const fallback = (
+      request.backupOperatorLockHashes ?? deployment.fallbackPrepareOperatorLockHashes
+    ).map((value) => hexToBytes(value));
     const fallbackSetHash = deriveDaoHarvestV2FallbackOperatorSetHash(fallback);
     const proof = encodeDaoHarvestV2FallbackOperatorProof(fallback);
     const tip = await this.#chain.getTipHeader();
@@ -480,7 +511,9 @@ export class DaoHarvestV2TransactionAdapter implements DaoHarvestV2MutationAdapt
       dao_type_hash: [...hexToBytes(daoTypeHash)],
       principal_capacity: request.principal.toString(),
       preferred_prepare_operator_lock_hash: [
-        ...hexToBytes(deployment.preferredPrepareOperatorLockHash),
+        ...hexToBytes(
+          request.preferredOperatorLockHash ?? deployment.preferredPrepareOperatorLockHash,
+        ),
       ],
       fallback_prepare_executor_set_hash: [...fallbackSetHash],
       prepare_service_fee: PREPARE_SERVICE_FEE.toString(),

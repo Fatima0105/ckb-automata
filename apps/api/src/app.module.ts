@@ -2,7 +2,7 @@ import { Module, type DynamicModule } from "@nestjs/common";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 
 import type { AutomataEnvironment } from "@ckb-automata/config";
-import { deploymentRegistry } from "@ckb-automata/core";
+import { deploymentRegistry, type OperatorAutomationDeployment } from "@ckb-automata/core";
 
 import { CkbClient, createCkbClient } from "./ckb-client.ts";
 import { AuthController, AuthService } from "./auth.ts";
@@ -58,6 +58,7 @@ import {
 import { JobQuoteController, JobQuoteService } from "./quotes.ts";
 import { PostgresLockResolutionRecorder } from "./lock-resolutions.ts";
 import { TransactionBuildService, TransactionController } from "./transactions.ts";
+import { loadOperatorAutomationDeployment } from "./operator-automation-manifest.ts";
 import {
   TransactionProgressController,
   TransactionProgressService,
@@ -68,6 +69,7 @@ import { WebhookController, WebhookService } from "./webhooks.ts";
 
 const DAO_HARVEST_V2_DEPLOYMENT = Symbol("DAO_HARVEST_V2_DEPLOYMENT");
 const DAO_HARVEST_V2_INDEXER = Symbol("DAO_HARVEST_V2_INDEXER");
+const OPERATOR_AUTOMATION_DEPLOYMENT = Symbol("OPERATOR_AUTOMATION_DEPLOYMENT");
 
 // Nest uses the class identity as the root dependency-injection module token.
 // oxlint-disable-next-line typescript/no-extraneous-class
@@ -137,6 +139,18 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
         },
       },
       {
+        provide: OPERATOR_AUTOMATION_DEPLOYMENT,
+        inject: [CkbClient],
+        useFactory: async (
+          ckbClient: CkbClient,
+        ): Promise<OperatorAutomationDeployment | undefined> => {
+          const path = environment.OPERATOR_AUTOMATION_MANIFEST_PATH;
+          return path === undefined
+            ? undefined
+            : loadOperatorAutomationDeployment(path, ckbClient, environment.CKB_GENESIS_HASH);
+        },
+      },
+      {
         provide: AuthService,
         inject: [DatabaseClient],
         useFactory: (databaseClient: DatabaseClient) =>
@@ -168,9 +182,12 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
       },
       {
         provide: JobCellDiscovery,
-        inject: [DatabaseClient, CkbClient],
-        useFactory: (databaseClient: DatabaseClient, ckbClient: CkbClient) =>
-          new JobCellDiscovery(databaseClient.database, ckbClient),
+        inject: [DatabaseClient, CkbClient, OPERATOR_AUTOMATION_DEPLOYMENT],
+        useFactory: (
+          databaseClient: DatabaseClient,
+          ckbClient: CkbClient,
+          operatorDeployment: OperatorAutomationDeployment | undefined,
+        ) => new JobCellDiscovery(databaseClient.database, ckbClient, operatorDeployment),
       },
       {
         provide: JobTransitionIndexer,
@@ -304,6 +321,7 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           JobTransitionIndexer,
           DAO_HARVEST_V2_INDEXER,
           DAO_HARVEST_V2_DEPLOYMENT,
+          OPERATOR_AUTOMATION_DEPLOYMENT,
           BackendTelemetry,
         ],
         useFactory: (
@@ -313,6 +331,7 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           transitions: JobTransitionIndexer,
           daoHarvestV2: DaoHarvestV2RevisionIndexer | undefined,
           daoHarvestV2Deployment: readonly VerifiedDaoHarvestV2Deployment[] | undefined,
+          operatorDeployment: OperatorAutomationDeployment | undefined,
           telemetry: BackendTelemetry,
         ) =>
           new LiveJobReconciler(ckbClient, checkpoints, discovery, transitions, telemetry.logger, {
@@ -324,6 +343,7 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
               }
               return result.deployment;
             },
+            ...(operatorDeployment === undefined ? {} : { operatorDeployment }),
             ...(daoHarvestV2 === undefined || daoHarvestV2Deployment === undefined
               ? {}
               : {
@@ -380,13 +400,25 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
       },
       {
         provide: TransactionBuildService,
-        inject: [JobQuoteService, CkbClient, PostgresLockResolutionRecorder],
+        inject: [
+          JobQuoteService,
+          CkbClient,
+          PostgresLockResolutionRecorder,
+          OPERATOR_AUTOMATION_DEPLOYMENT,
+        ],
         useFactory: (
           quotes: JobQuoteService,
           ckbClient: CkbClient,
           resolutions: PostgresLockResolutionRecorder,
+          operatorDeployment: OperatorAutomationDeployment | undefined,
         ) =>
-          new TransactionBuildService(quotes, ckbClient, environment.CKB_GENESIS_HASH, resolutions),
+          new TransactionBuildService(
+            quotes,
+            ckbClient,
+            environment.CKB_GENESIS_HASH,
+            resolutions,
+            operatorDeployment,
+          ),
       },
       {
         provide: TransactionProgressService,

@@ -24,6 +24,7 @@ export interface DeadlineCreationRequest {
   readonly cancelLockHash: Hash32;
   readonly reward: string;
   readonly creatorNonce: string;
+  readonly preferredExecutorLockHash?: Hash32;
 }
 
 function record(value: unknown, name: string): Record<string, unknown> {
@@ -33,11 +34,16 @@ function record(value: unknown, name: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function exact(value: Record<string, unknown>, keys: readonly string[], name: string): void {
+function exact(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+  name: string,
+  optional: readonly string[] = [],
+): void {
   if (Object.keys(value).some((key) => !keys.includes(key))) {
     throw new TypeError(`${name} contains unsupported fields`);
   }
-  if (keys.some((key) => !(key in value))) {
+  if (keys.some((key) => !optional.includes(key) && !(key in value))) {
     throw new TypeError(`${name} is missing required fields`);
   }
 }
@@ -67,8 +73,10 @@ export function parseDeadlineCreationRequest(input: unknown): DeadlineCreationRe
       "cancelLockHash",
       "reward",
       "creatorNonce",
+      "preferredExecutorLockHash",
     ],
     "deadline request",
+    ["preferredExecutorLockHash"],
   );
 
   if (!Array.isArray(request["pledges"]) || request["pledges"].length === 0) {
@@ -126,5 +134,13 @@ export function parseDeadlineCreationRequest(input: unknown): DeadlineCreationRe
     cancelLockHash: nonzeroHash(request["cancelLockHash"], "cancelLockHash"),
     reward: reward.toString(),
     creatorNonce: creatorNonce.toString(),
+    ...(request["preferredExecutorLockHash"] === undefined
+      ? {}
+      : {
+          preferredExecutorLockHash: nonzeroHash(
+            request["preferredExecutorLockHash"],
+            "preferredExecutorLockHash",
+          ),
+        }),
   });
 }

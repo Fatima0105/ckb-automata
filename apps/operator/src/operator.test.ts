@@ -45,7 +45,8 @@ import {
 } from "@ckb-automata/molecule";
 
 import { parseOperatorConfiguration } from "./config.ts";
-import { discoverHarvestV2Jobs } from "./discovery.ts";
+import { discoverHarvestV2Jobs, discoverPaymentJobs } from "./discovery.ts";
+import { loadAutomationManifest, verifyAutomationManifest } from "./automation-manifest.ts";
 import { loadOperatorManifest, verifyOperatorManifest, type OperatorManifest } from "./manifest.ts";
 import type { JsonRpcClient } from "./rpc.ts";
 import { startOperatorServer } from "./server.ts";
@@ -163,6 +164,32 @@ async function manifestFixture() {
   return { directory, path, contracts };
 }
 
+async function automationManifestFixture() {
+  const contracts = {
+    jobLock: manifestContract("5"),
+    deadlinePolicy: manifestContract("6"),
+    recurringPolicy: manifestContract("7"),
+  };
+  const json = {
+    schemaVersion: 1,
+    releaseVersion: "0.3.0",
+    network: "ckb_testnet",
+    genesisHash: hash("a"),
+    sourceRevision: "b".repeat(40),
+    secp256k1Blake160: {
+      cellDep: { outPoint: { txHash: hash("e"), index: "0x0" }, depType: "depGroup" },
+    },
+    contracts: Object.fromEntries(
+      Object.entries(contracts).map(([name, item]) => [name, item.value]),
+    ),
+    defaultPreferredOperatorLockHash: hash("9"),
+  };
+  const directory = await mkdtemp(join(tmpdir(), "ckautomata-payment-operator-"));
+  const path = join(directory, "manifest.json");
+  await writeFile(path, `${JSON.stringify(json, null, 2)}\n`);
+  return { directory, path, contracts };
+}
+
 test("configuration is public-RPC only and redacts the signing key", () => {
   const config = parseOperatorConfiguration(
     {
@@ -178,6 +205,89 @@ test("configuration is public-RPC only and redacts the signing key", () => {
   assert.equal(config.privateKey, `0x${"1".repeat(64)}`);
   assert.equal("DATABASE_URL" in config, false);
   assert.equal("REDIS_URL" in config, false);
+});
+
+test("a payment-only operator does not require a Harvest manifest", () => {
+  const config = parseOperatorConfiguration(
+    {
+      CKB_RPC_URL: "https://rpc.example/",
+      CKB_INDEXER_URL: "https://indexer.example/",
+      OPERATOR_AUTOMATION_MANIFEST_PATH: "payments.json",
+    },
+    "C:/operator",
+  );
+  assert.equal(config.manifestPath, undefined);
+  assert.equal(config.automationManifestPath, "C:\\operator\\payments.json");
+});
+
+test("payment manifest verification and discovery cover scheduled and recurring jobs", async () => {
+  const fixture = await automationManifestFixture();
+  try {
+    const loaded = await loadAutomationManifest(fixture.path);
+    const byOutPoint = new Map(
+      Object.values(fixture.contracts).map((item) => [
+        item.value.cellDep.outPoint.txHash,
+        item.binary,
+      ]),
+    );
+    const rpc = new RpcFixture({
+      get_block_hash: hash("a"),
+      get_live_cell: (params: readonly unknown[]) => {
+        const point = params[0] as { tx_hash: string };
+        return {
+          status: "live",
+          cell: { data: { content: bytesToHex(byOutPoint.get(parseHash32(point.tx_hash))!) } },
+        };
+      },
+    });
+    assert.equal((await verifyAutomationManifest(loaded, rpc)).status, "verified");
+    const job = JobDataV1.pack({
+      version: 1,
+      flags: 0,
+      job_id: [...bytes(hash("8"))],
+      sequence: 0,
+      state: 0,
+      trigger_kind: 1,
+      trigger_params_hash: [...bytes(hash("1"))],
+      policy_script_hash: [...bytes(hash("2"))],
+      payload_hash: [...bytes(hash("3"))],
+      reward: 100,
+      remaining_budget: 200,
+      not_before: 1_000,
+      not_after: 1_012,
+      remaining_runs: 1,
+      cancel_lock_hash: [...bytes(hash("4"))],
+    });
+    const indexer = new RpcFixture({
+      get_cells: (params: readonly unknown[]) => {
+        const search = params[0] as { filter: { script: { code_hash: string } } };
+        return {
+          objects: [
+            {
+              output_data: bytesToHex(job),
+              out_point: {
+                tx_hash:
+                  search.filter.script.code_hash ===
+                  loaded.deployment.contracts.deadlinePolicy.script.codeHash
+                    ? hash("5")
+                    : hash("6"),
+                index: "0x0",
+              },
+              block_number: "0x64",
+            },
+          ],
+        };
+      },
+    });
+    const jobs = await discoverPaymentJobs(loaded, indexer, "all");
+    assert.deepEqual(
+      jobs.map(({ kind }) => kind),
+      ["scheduled", "recurring"],
+    );
+    assert.equal(jobs[0]?.takeoverBlock, "1012");
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
 });
 
 test("manifest verification resolves every immutable code cell", async () => {

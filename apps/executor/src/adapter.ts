@@ -5,6 +5,7 @@ import {
   type Hash32,
   type JobInspectionResult,
   type OutPoint,
+  type OperatorAutomationDeployment,
   type PolicyMetadata,
   type RegisteredDeployment,
   type ScriptIdentity,
@@ -45,6 +46,7 @@ export interface ExecutorSnapshot {
   readonly resolvedLocks: readonly ScriptIdentity[];
   readonly payloads: readonly Hex[];
   readonly claims: Readonly<Record<string, unknown>>;
+  readonly operatorDeployment?: OperatorAutomationDeployment;
 }
 
 export interface ExecutorIdentity {
@@ -237,6 +239,9 @@ function createEligibilityContext(snapshot: ExecutorSnapshot): ExecutorEligibili
     manifest: snapshot.deployment.manifest,
     expectedGenesisHash: snapshot.deployment.genesisHash,
     ...(snapshot.job.output.type ? { policyScript: snapshot.job.output.type } : {}),
+    ...(snapshot.operatorDeployment === undefined
+      ? {}
+      : { operatorDeployment: snapshot.operatorDeployment }),
   });
   if (jobInspection.status !== "ok") {
     throw new ExecutorAdapterError(

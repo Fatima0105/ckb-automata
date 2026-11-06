@@ -7,6 +7,7 @@ import { serializeRawTransaction, serializeWitnessArgs } from "@nervosnetwork/ck
 import { parseHash32, parseOutPoint } from "./chain-values.ts";
 import { deploymentRegistry } from "./deployment-registry.ts";
 import type { RegisteredDeployment } from "./deployment-registry.ts";
+import type { OperatorAutomationDeployment } from "./operator-deployment.ts";
 import type { UnsignedDeadlineTransaction as UnsignedTransaction } from "./deadline-creation.ts";
 import {
   assertRecurringCompletion,
@@ -19,6 +20,18 @@ const fixtureUrl = new URL(
   "../../../contracts/fixtures/recurring_creation_v1.json",
   import.meta.url,
 );
+
+function operatorContract(byte: string) {
+  return {
+    script: { codeHash: parseHash32(`0x${byte.repeat(64)}`), hashType: "data1" as const },
+    cellDep: {
+      outPoint: { txHash: parseHash32(`0x${byte.repeat(64)}`), index: "0x0" as const },
+      depType: "code" as const,
+    },
+    binarySha256: byte.repeat(64),
+    sizeBytes: 1,
+  };
+}
 
 interface Fixture {
   readonly owner_lock_hash: string;
@@ -194,4 +207,49 @@ test("recurring creation rejects unpayable or overflowing schedules", async () =
     () => buildRecurringCreation({ ...baseline, amount: "6099999999" }),
     /plain output minimum/,
   );
+});
+
+test("operator-bound recurring creation commits preferred and takeover blocks", async () => {
+  const { build: legacy, deployment } = await fixtureBuild();
+  const operator: OperatorAutomationDeployment = {
+    genesisHash: deployment.genesisHash,
+    manifestSha256: "a".repeat(64),
+    secp256k1Blake160: deployment.manifest.secp256k1Blake160,
+    contracts: {
+      jobLock: operatorContract("4"),
+      deadlinePolicy: operatorContract("5"),
+      recurringPolicy: operatorContract("6"),
+    },
+    defaultPreferredOperatorLockHash: parseHash32(`0x${"77".repeat(32)}`),
+  };
+  const bound = buildRecurringCreation({
+    deployment,
+    ownerLockHash: legacy.displayIntent.ownerLockHash,
+    recipientLockHash: legacy.displayIntent.recipientLockHash,
+    amount: "10000000000",
+    intervalBlocks: "100",
+    firstNotBefore: "500",
+    totalRuns: "3",
+    reward: "10000000000",
+    creatorNonce: "9",
+    creationFee: {
+      transactionBytes: { minimum: "500", maximum: "800" },
+      feeRatePerKilobyte: { minimum: "1000", maximum: "2000" },
+    },
+    operator: {
+      deployment: operator,
+      preferredExecutorLockHash: operator.defaultPreferredOperatorLockHash,
+    },
+  });
+  assert.equal(bound.intent.version, 2);
+  assert.equal(bound.intent.takeoverBlock, "512");
+  assert.equal(
+    bound.transaction.outputs[0]?.lock.codeHash,
+    operator.contracts.jobLock.script.codeHash,
+  );
+  assert.equal(
+    bound.transaction.outputs[0]?.type?.codeHash,
+    operator.contracts.recurringPolicy.script.codeHash,
+  );
+  assert.equal(legacy.intent.version, 1);
 });

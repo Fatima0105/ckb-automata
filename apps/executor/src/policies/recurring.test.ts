@@ -14,6 +14,7 @@ import {
   parseOutPoint,
   parseShannons,
   toRpcHex,
+  type OperatorAutomationDeployment,
   type RegisteredDeployment,
   type ScriptIdentity,
 } from "@ckb-automata/core";
@@ -38,6 +39,32 @@ function lock(value: RegisteredDeployment, byte: string, argsBytes = 20): Script
   };
 }
 
+function operatorContract(byte: string) {
+  return {
+    script: { codeHash: parseHash32(`0x${byte.repeat(64)}`), hashType: "data1" as const },
+    cellDep: {
+      outPoint: { txHash: parseHash32(`0x${byte.repeat(64)}`), index: "0x0" as const },
+      depType: "code" as const,
+    },
+    binarySha256: byte.repeat(64),
+    sizeBytes: 1,
+  };
+}
+
+function operatorDeployment(value: RegisteredDeployment): OperatorAutomationDeployment {
+  return {
+    genesisHash: value.genesisHash,
+    manifestSha256: "a".repeat(64),
+    secp256k1Blake160: value.manifest.secp256k1Blake160,
+    contracts: {
+      jobLock: operatorContract("d"),
+      deadlinePolicy: operatorContract("e"),
+      recurringPolicy: operatorContract("f"),
+    },
+    defaultPreferredOperatorLockHash: parseHash32(`0x${"33".repeat(32)}`),
+  };
+}
+
 function header(number: bigint) {
   return Object.freeze({
     hash: parseHash32(`0x${number.toString(16).padStart(64, "0")}`),
@@ -52,6 +79,7 @@ async function recurringFixture(
   tip: bigint,
   amount = 10_000_000_000n,
   recipientArgsBytes = 20,
+  operator?: Readonly<{ preferredByte: string; takeoverDelayBlocks: bigint }>,
 ): Promise<{
   readonly snapshot: ExecutorSnapshot;
   readonly executorLock: ScriptIdentity;
@@ -62,6 +90,7 @@ async function recurringFixture(
   const ownerLock = lock(registered, "11");
   const recipientLock = lock(registered, "22", recipientArgsBytes);
   const executorLock = lock(registered, "33");
+  const operatorContracts = operatorDeployment(registered);
   const reward = 10_000_000_000n;
   const totalRuns = 4n;
   const interval = 10n;
@@ -80,6 +109,17 @@ async function recurringFixture(
       transactionBytes: { minimum: "500", maximum: "900" },
       feeRatePerKilobyte: { minimum: "1000", maximum: "2000" },
     },
+    ...(operator === undefined
+      ? {}
+      : {
+          operator: {
+            deployment: operatorContracts,
+            preferredExecutorLockHash: parseHash32(
+              scriptToHash(lock(registered, operator.preferredByte)),
+            ),
+            takeoverDelayBlocks: operator.takeoverDelayBlocks,
+          },
+        }),
   });
   const remainingRuns = totalRuns - sequence;
   const remainingBudget = (amount + reward) * remainingRuns;
@@ -130,8 +170,11 @@ async function recurringFixture(
       ]),
       headers: Object.freeze([createdAt]),
       resolvedLocks: Object.freeze([ownerLock, recipientLock]),
-      payloads: Object.freeze([creation.recurringPayload]),
+      payloads: Object.freeze([
+        operator === undefined ? creation.recurringPayload : creation.intent.operatorPayload!,
+      ]),
       claims: Object.freeze({}),
+      ...(operator === undefined ? {} : { operatorDeployment: operatorContracts }),
     }),
   };
 }
@@ -196,6 +239,37 @@ test("recurring adapter stops before building until the committed schedule bound
   if (result.status === "ineligible") {
     assert.equal(result.eligibility.reason, "EXECUTOR_NOT_YET_ELIGIBLE");
   }
+});
+
+test("operator-bound recurring jobs open to other executors only after takeover", async () => {
+  const preferred = await recurringFixture(0n, 100n, 10_000_000_000n, 20, {
+    preferredByte: "33",
+    takeoverDelayBlocks: 12n,
+  });
+  const preferredResult = await execute(preferred);
+  assert.equal(preferredResult.status, "built");
+  if (preferredResult.status !== "built") return;
+  assert.equal(
+    preferredResult.build.transaction.inputs[0]?.since,
+    toRpcHex(parseBlockNumber(100n)),
+  );
+
+  const fallback = await recurringFixture(0n, 100n, 10_000_000_000n, 20, {
+    preferredByte: "44",
+    takeoverDelayBlocks: 12n,
+  });
+  const waiting = await execute(fallback);
+  assert.equal(waiting.status, "ineligible");
+
+  const takeover = await execute({
+    ...fallback,
+    snapshot: { ...fallback.snapshot, tip: header(112n) },
+  });
+  assert.equal(takeover.status, "built");
+  if (takeover.status !== "built") return;
+  assert.equal(takeover.build.transaction.inputs[0]?.since, toRpcHex(parseBlockNumber(112n)));
+  const successor = JobDataV1.unpack(hexToBytes(takeover.build.transaction.outputsData[2]!));
+  assert.equal(BigInt(successor.not_after.toString()), 122n);
 });
 
 test("recurring adapter rejects unresolved or mismatched payload commitments", async () => {

@@ -36,6 +36,13 @@ import { CONTRACT_CAPACITY } from "./contract-costs.ts";
 import type { CellDepIdentity, ScriptIdentity } from "./job-inspection.ts";
 import { deriveJobId } from "./job-identity.ts";
 import type { RegisteredDeployment } from "./deployment-registry.ts";
+import type { OperatorAutomationDeployment } from "./operator-deployment.ts";
+import {
+  deriveOperatorPayloadHash,
+  normalizeOperatorSelection,
+  operatorTakeoverBlock,
+  packOperatorPayload,
+} from "./operator-selection.ts";
 import { calculateDeadlineQuote, type DeadlineQuote, type FeeRangeInput } from "./quotes.ts";
 import { ABSOLUTE_BLOCK_TRIGGER_KIND, deriveAbsoluteBlockTriggerHash } from "./triggers.ts";
 
@@ -59,6 +66,11 @@ export interface DeadlineCreationInput {
   readonly reward: IntegerInput;
   readonly creatorNonce: IntegerInput;
   readonly creationFee: FeeRangeInput;
+  readonly operator?: {
+    readonly deployment: OperatorAutomationDeployment;
+    readonly preferredExecutorLockHash: Hash32;
+    readonly takeoverDelayBlocks?: bigint;
+  };
 }
 
 export interface UnsignedCellInput {
@@ -83,7 +95,7 @@ export interface UnsignedDeadlineTransaction {
 }
 
 export interface NormalizedDeadlineIntent {
-  readonly version: 1;
+  readonly version: 1 | 2;
   readonly genesisHash: Hash32;
   readonly deploymentManifestSha256: string;
   readonly anchorOutPoint: OutPoint;
@@ -105,12 +117,17 @@ export interface NormalizedDeadlineIntent {
   readonly payloadHash: Hash32;
   readonly triggerParamsHash: Hash32;
   readonly pledgeRecords: Hex;
+  readonly preferredExecutorLockHash?: Hash32;
+  readonly takeoverBlock?: string;
+  readonly operatorPayload?: Hex;
+  readonly operatorDeploymentManifestSha256?: string;
 }
 
 export interface DeadlineCompletionContract {
   readonly requiredInputCount: number;
   readonly requiredOutputCount: 2;
   readonly requiredOutputType: Hex;
+  readonly requiredInputType?: Hex;
   readonly maximumFee: Shannons;
   readonly rules: readonly [
     "preserve-required-input-prefix",
@@ -231,7 +248,7 @@ function intentBody(intent: NormalizedDeadlineIntent): Uint8Array {
   if (!/^[0-9a-f]{64}$/.test(digest)) {
     throw new TypeError("deployment manifest digest must be a lowercase SHA-256 value");
   }
-  return concatenate(
+  const base = concatenate(
     hash32ToBytes(intent.genesisHash),
     hexToBytes(`0x${digest}`),
     encodeOutPoint(intent.anchorOutPoint),
@@ -254,6 +271,23 @@ function intentBody(intent: NormalizedDeadlineIntent): Uint8Array {
     hash32ToBytes(intent.triggerParamsHash),
     uint32(hexToBytes(intent.pledgeRecords).length),
     hexToBytes(intent.pledgeRecords),
+  );
+  if (intent.version === 1) return base;
+  if (
+    intent.preferredExecutorLockHash === undefined ||
+    intent.takeoverBlock === undefined ||
+    intent.operatorPayload === undefined ||
+    intent.operatorDeploymentManifestSha256 === undefined
+  ) {
+    throw new TypeError("operator intent fields are incomplete");
+  }
+  return concatenate(
+    base,
+    hash32ToBytes(intent.preferredExecutorLockHash),
+    uint64ToLittleEndian(parseBlockNumber(intent.takeoverBlock)),
+    hexToBytes(`0x${intent.operatorDeploymentManifestSha256}`),
+    uint32(hexToBytes(intent.operatorPayload).length),
+    hexToBytes(intent.operatorPayload),
   );
 }
 
@@ -297,20 +331,40 @@ export function buildDeadlineCreation(input: DeadlineCreationInput): DeadlineCre
   const campaignId = hash32FromBytes(campaignIdBytes);
   const campaignType = script(input.deployment.contracts["demo-campaign-type"], campaignId as Hex);
   const campaignTypeHash = parseHash32(scriptToHash(campaignType));
+  const operator = input.operator;
+  const policyContract = operator?.deployment.contracts.deadlinePolicy;
   const policyScript = script(
-    input.deployment.contracts["deadline-policy"],
+    policyContract ?? input.deployment.contracts["deadline-policy"],
     campaignTypeHash as Hex,
   );
   const policyScriptHash = parseHash32(scriptToHash(policyScript));
+  const applicationPayload = concatenate(Uint8Array.of(1), hash32ToBytes(campaignTypeHash));
+  const selection =
+    operator === undefined
+      ? undefined
+      : normalizeOperatorSelection({
+          preferredExecutorLockHash: operator.preferredExecutorLockHash,
+          ...(operator.takeoverDelayBlocks === undefined
+            ? {}
+            : { takeoverDelayBlocks: operator.takeoverDelayBlocks }),
+        });
+  const operatorPayloadBytes =
+    selection === undefined ? undefined : packOperatorPayload(selection, applicationPayload);
   const payloadHash = hash32FromBytes(
-    deriveDeadlinePayloadHash(policyScriptHash, campaignTypeHash),
+    operatorPayloadBytes === undefined
+      ? deriveDeadlinePayloadHash(policyScriptHash, campaignTypeHash)
+      : deriveOperatorPayloadHash(hash32ToBytes(policyScriptHash), operatorPayloadBytes),
   );
+  const takeoverBlock =
+    selection === undefined
+      ? undefined
+      : operatorTakeoverBlock(deadlineBlock, selection.takeoverDelayBlocks);
   const triggerParamsHash = hash32FromBytes(deriveAbsoluteBlockTriggerHash(deadlineBlock));
   const refundCommitment = hash32FromBytes(deriveRefundCommitment(pledges.length, records));
   const campaignCapacity = quote.occupiedCapacity.applicationCell + pledged;
   const jobCapacity = quote.occupiedCapacity.jobCell + reward;
   const normalizedIntent = freezeIntent({
-    version: 1,
+    version: operator === undefined ? 1 : 2,
     genesisHash: input.deployment.genesisHash,
     deploymentManifestSha256: input.deployment.manifestSha256,
     anchorOutPoint,
@@ -332,13 +386,21 @@ export function buildDeadlineCreation(input: DeadlineCreationInput): DeadlineCre
     payloadHash,
     triggerParamsHash,
     pledgeRecords: bytesToHex(records) as Hex,
+    ...(selection === undefined || takeoverBlock === undefined || operatorPayloadBytes === undefined
+      ? {}
+      : {
+          preferredExecutorLockHash: selection.preferredExecutorLockHash,
+          takeoverBlock: takeoverBlock.toString(),
+          operatorPayload: bytesToHex(operatorPayloadBytes) as Hex,
+          operatorDeploymentManifestSha256: operator!.deployment.manifestSha256,
+        }),
   });
   const encodedIntent = intentBody(normalizedIntent);
   const intentHashBytes = protocolHash(DEADLINE_CREATION_INTENT_DOMAIN, encodedIntent);
   const intentHash = hash32FromBytes(intentHashBytes);
   const jobIdBytes = deriveJobId({
     genesisHash: hash32ToBytes(input.deployment.genesisHash),
-    protocolVersion: 1,
+    protocolVersion: operator === undefined ? 1 : 2,
     creationCommitment: intentHashBytes,
     anchor: { kind: "output_index", outputIndex: 1n },
     creatorNonce,
@@ -369,18 +431,24 @@ export function buildDeadlineCreation(input: DeadlineCreationInput): DeadlineCre
     reward: reward.toString(),
     remaining_budget: reward.toString(),
     not_before: deadlineBlock.toString(),
-    not_after: "0",
+    not_after: takeoverBlock?.toString() ?? "0",
     remaining_runs: 1,
     cancel_lock_hash: [...hash32ToBytes(cancelLockHash)],
   });
   const campaignLock = script(input.deployment.contracts["campaign-lock"], "0x");
-  const jobLock = script(input.deployment.contracts["job-lock"], "0x");
+  const jobLock = script(
+    operator?.deployment.contracts.jobLock ?? input.deployment.contracts["job-lock"],
+    "0x",
+  );
   const transaction: UnsignedDeadlineTransaction = Object.freeze({
     version: "0x0",
     cellDeps: Object.freeze([
-      input.deployment.manifest.secp256k1Blake160.cellDep,
-      input.deployment.contracts["job-lock"].cellDep,
-      input.deployment.contracts["deadline-policy"].cellDep,
+      operator?.deployment.secp256k1Blake160.cellDep ??
+        input.deployment.manifest.secp256k1Blake160.cellDep,
+      operator?.deployment.contracts.jobLock.cellDep ??
+        input.deployment.contracts["job-lock"].cellDep,
+      operator?.deployment.contracts.deadlinePolicy.cellDep ??
+        input.deployment.contracts["deadline-policy"].cellDep,
       input.deployment.contracts["demo-campaign-type"].cellDep,
       input.deployment.contracts["campaign-lock"].cellDep,
     ]),
@@ -413,7 +481,11 @@ export function buildDeadlineCreation(input: DeadlineCreationInput): DeadlineCre
       bytesToHex(jobDataBytes) as Hex,
     ]),
     witnesses: Object.freeze([
-      serializeWitnessArgs({ lock: "", inputType: "", outputType: bytesToHex(records) }) as Hex,
+      serializeWitnessArgs({
+        lock: "",
+        inputType: operatorPayloadBytes === undefined ? "" : bytesToHex(operatorPayloadBytes),
+        outputType: bytesToHex(records),
+      }) as Hex,
     ]),
   });
   return Object.freeze({
@@ -430,6 +502,9 @@ export function buildDeadlineCreation(input: DeadlineCreationInput): DeadlineCre
       requiredInputCount: transaction.inputs.length,
       requiredOutputCount: 2,
       requiredOutputType: bytesToHex(records) as Hex,
+      ...(operatorPayloadBytes === undefined
+        ? {}
+        : { requiredInputType: bytesToHex(operatorPayloadBytes) as Hex }),
       maximumFee: quote.estimatedFee.maximum,
       rules: Object.freeze([
         "preserve-required-input-prefix",
@@ -478,6 +553,28 @@ function witnessOutputType(witness: Hex): Hex | null {
   return bytesToHex(field.slice(4)) as Hex;
 }
 
+function witnessInputType(witness: Hex): Hex | null {
+  const bytes = hexToBytes(witness);
+  if (bytes.length < 16) throw new Error("completed witness 0 is not a Molecule WitnessArgs table");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const total = view.getUint32(0, true);
+  const inputOffset = view.getUint32(8, true);
+  const outputOffset = view.getUint32(12, true);
+  if (total !== bytes.length || inputOffset > outputOffset || outputOffset > total) {
+    throw new Error("completed witness 0 has invalid Molecule offsets");
+  }
+  const field = bytes.slice(inputOffset, outputOffset);
+  if (field.length === 0) return null;
+  if (
+    field.length < 4 ||
+    new DataView(field.buffer, field.byteOffset, field.byteLength).getUint32(0, true) !==
+      field.length - 4
+  ) {
+    throw new Error("completed witness 0 has an invalid input_type field");
+  }
+  return bytesToHex(field.slice(4)) as Hex;
+}
+
 export function assertDeadlineCompletion(
   build: DeadlineCreationBuild,
   completed: UnsignedDeadlineTransaction,
@@ -522,5 +619,11 @@ export function assertDeadlineCompletion(
   const firstWitness = completed.witnesses[0];
   if (!firstWitness || witnessOutputType(firstWitness) !== build.completion.requiredOutputType) {
     throw new Error("wallet completion changed the pledge records in witness 0");
+  }
+  if (
+    build.completion.requiredInputType !== undefined &&
+    witnessInputType(firstWitness) !== build.completion.requiredInputType
+  ) {
+    throw new Error("wallet completion changed the operator policy in witness 0");
   }
 }

@@ -11,6 +11,7 @@ export const AUTOMATA_ENV_KEYS = [
   "CKB_RPC_URL",
   "CKB_INDEXER_URL",
   "DAO_HARVEST_V2_MANIFEST_PATH",
+  "OPERATOR_AUTOMATION_MANIFEST_PATH",
   "DATABASE_URL",
   "REDIS_URL",
   "EXECUTOR_LOCK_ARGS",
@@ -42,6 +43,15 @@ const commonFields = {
   CKB_RPC_URL: z.url(),
   DATABASE_URL: z.string().startsWith("postgresql://"),
   DAO_HARVEST_V2_MANIFEST_PATH: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .min(1)
+      .max(512)
+      .refine((value) => !value.includes("\0"), "must be a valid path")
+      .optional(),
+  ),
+  OPERATOR_AUTOMATION_MANIFEST_PATH: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z
       .string()

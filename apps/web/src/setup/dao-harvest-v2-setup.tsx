@@ -28,11 +28,15 @@ import {
 } from "./dao-harvest-v2-review.ts";
 import { DAO_HARVEST_SETUP_STEPS, type SetupDraft, type SetupErrors } from "./setup-flow.ts";
 import { SetupStepper, type SetupStepRenderContext } from "./setup-stepper.tsx";
+import { OperatorSelectionFields } from "./operator-selection-fields.tsx";
 
 const INITIAL_DRAFT: SetupDraft = Object.freeze({
   cycleCount: "1",
+  backupOperatorAddress: "",
+  operatorMode: "automatic",
   payoutAddress: "",
   principalCkb: "",
+  preferredOperatorAddress: "",
   recurrence: "once",
   title: "",
 });
@@ -105,11 +109,19 @@ async function setupBody(
   creatorNonce: string,
 ) {
   if (!session.ownerLockHash) throw new Error("Connect the owner wallet first.");
-  const [identityOutPoint, ownerLock, payoutLock] = await Promise.all([
-    session.selectDeadlinePledge(),
-    session.getOwnerLock(session.ownerLockHash),
-    session.resolveLock(draft["payoutAddress"] ?? ""),
-  ]);
+  const customOperators = draft["operatorMode"] === "custom";
+  const [identityOutPoint, ownerLock, payoutLock, preferredOperatorLock, backupOperatorLock] =
+    await Promise.all([
+      session.selectDeadlinePledge(),
+      session.getOwnerLock(session.ownerLockHash),
+      session.resolveLock(draft["payoutAddress"] ?? ""),
+      customOperators
+        ? session.resolveLock(draft["preferredOperatorAddress"] ?? "")
+        : Promise.resolve(undefined),
+      customOperators
+        ? session.resolveLock(draft["backupOperatorAddress"] ?? "")
+        : Promise.resolve(undefined),
+    ]);
   return Object.freeze({
     creatorNonce,
     identityOutPoint,
@@ -119,6 +131,12 @@ async function setupBody(
     payoutLockHash: session.reviewLockHash(payoutLock),
     principal: principal(draft),
     totalCycles: cycles(draft),
+    ...(preferredOperatorLock === undefined || backupOperatorLock === undefined
+      ? {}
+      : {
+          preferredOperatorLockHash: session.reviewLockHash(preferredOperatorLock),
+          backupOperatorLockHashes: [session.reviewLockHash(backupOperatorLock)],
+        }),
   });
 }
 
@@ -150,6 +168,23 @@ async function validateDetails(
   }
   if (session.status !== "ready" || !session.ownerLockHash) {
     errors["ownerAddress"] = "Connect a supported CKB testnet wallet.";
+  }
+  if (draft["operatorMode"] === "custom") {
+    for (const [field, label] of [
+      ["preferredOperatorAddress", "preferred operator"],
+      ["backupOperatorAddress", "backup operator"],
+    ] as const) {
+      const value = (draft[field] ?? "").trim();
+      if (!value) {
+        errors[field] = `Enter the ${label} address.`;
+        continue;
+      }
+      try {
+        await session.resolveLockHash(value);
+      } catch {
+        errors[field] = `Enter a valid CKB testnet ${label} address.`;
+      }
+    }
   }
   return errors;
 }
@@ -252,6 +287,7 @@ function HarvestV2Details(context: SetupStepRenderContext) {
           <span>Keeps the compensation cell usable and returns when you close or recover.</span>
         </div>
       </div>
+      <OperatorSelectionFields context={context} includeBackup />
       {session.status === "ready" ? (
         <InlineNotice title="Owner wallet connected" tone="success">
           <p>

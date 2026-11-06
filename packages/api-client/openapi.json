@@ -3930,6 +3930,7 @@
                     "minItems": 1,
                     "type": "array"
                   },
+                  "preferredExecutorLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                   "reward": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
                   "successLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                   "target": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
@@ -4188,6 +4189,7 @@
                     "type": "array"
                   },
                   "ownerLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                  "preferredExecutorLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                   "recipientLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                   "reward": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
                   "totalRuns": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
@@ -5066,6 +5068,10 @@
                             "minItems": 1,
                             "type": "array"
                           },
+                          "preferredExecutorLockHash": {
+                            "pattern": "^0x[0-9a-f]{64}$",
+                            "type": "string"
+                          },
                           "reward": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
                           "successLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                           "target": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }
@@ -5105,6 +5111,10 @@
                             "type": "array"
                           },
                           "ownerLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "preferredExecutorLockHash": {
+                            "pattern": "^0x[0-9a-f]{64}$",
+                            "type": "string"
+                          },
                           "recipientLockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
                           "reward": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" },
                           "totalRuns": { "pattern": "^(0|[1-9][0-9]*)$", "type": "string" }

@@ -3264,6 +3264,7 @@ export interface operations {
                         };
                         readonly refundLockHash: string;
                     }[];
+                    readonly preferredExecutorLockHash?: string;
                     readonly reward: string;
                     readonly successLockHash: string;
                     readonly target: string;
@@ -3381,6 +3382,7 @@ export interface operations {
                         readonly hashType: "data" | "data1" | "type";
                     }[];
                     readonly ownerLockHash: string;
+                    readonly preferredExecutorLockHash?: string;
                     readonly recipientLockHash: string;
                     readonly reward: string;
                     readonly totalRuns: string;
@@ -3793,6 +3795,7 @@ export interface operations {
                             };
                             readonly refundLockHash: string;
                         }[];
+                        readonly preferredExecutorLockHash?: string;
                         readonly reward: string;
                         readonly successLockHash: string;
                         readonly target: string;
@@ -3808,6 +3811,7 @@ export interface operations {
                             readonly hashType: "data" | "data1" | "type";
                         }[];
                         readonly ownerLockHash: string;
+                        readonly preferredExecutorLockHash?: string;
                         readonly recipientLockHash: string;
                         readonly reward: string;
                         readonly totalRuns: string;

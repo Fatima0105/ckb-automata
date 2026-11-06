@@ -14,6 +14,7 @@ import {
 } from "./recurring-form.ts";
 import { RECURRING_SETUP_STEPS } from "./setup-flow.ts";
 import type { SetupStepRenderContext } from "./setup-stepper.tsx";
+import { OperatorSelectionFields } from "./operator-selection-fields.tsx";
 import { SetupStepper } from "./setup-stepper.tsx";
 import {
   CreationReview,
@@ -74,6 +75,7 @@ function RecurringDetails(context: SetupStepRenderContext) {
           value={context.draft["amountCkb"] ?? ""}
         />
       </div>
+      <OperatorSelectionFields context={context} />
     </div>
   );
 }

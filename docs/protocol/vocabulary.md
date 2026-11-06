@@ -18,7 +18,7 @@ must not change its meaning.
 | `committed`          | Committed            | `committed`         | The scripts accepted the transition in a block on the currently canonical chain.                  |
 | `confirmed`          | Confirmed            | `confirmed`         | Off-chain confidence after configured canonical depth; this is never a contract state.            |
 | `service_fee`        | Service charge       | `serviceFee`        | A capped payment from realized compensation for one completed DAO Harvest V2 action.              |
-| `preferred_operator` | Preferred operator   | `preferredOperator` | The first executor authorized for a specific DAO Harvest V2 action.                               |
+| `preferred_operator` | Preferred operator   | `preferredOperator` | The first executor authorized for a payment or DAO Harvest action.                                |
 | `fallback_operator`  | Backup operator      | `fallbackOperator`  | An executor authorized to take over only after the committed lower bound.                         |
 | `compensation_cell`  | Compensation balance | `compensationCell`  | The owner-bound Cell that accumulates net DAO Harvest V2 compensation.                            |
 | `compensation_seed`  | Recoverable reserve  | `compensationSeed`  | Owner value required for occupied capacity and returned on close or recovery.                     |

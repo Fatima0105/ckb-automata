@@ -34,6 +34,10 @@ and pays the accumulated delta only when that delta can form a valid payout Cell
 recovery create no successor and pay the full Cell capacity, including the reserve, to the committed
 payout rule.
 
+Owner-authorized operator rotation changes the immutable payload hash, so it also consumes and
+recreates the Compensation Cell with the new payload-hash argument and exactly unchanged capacity.
+No automated transition may change any Compensation Lock argument.
+
 Operator payments increase an ordinary input Cell under the operator's exact full lock. The
 successor keeps the same lock and increases capacity by the exact payment. This input also proves
 operator identity. A payment may therefore be one shannon without creating a separate dust output.

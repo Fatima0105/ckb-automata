@@ -50,6 +50,7 @@ import {
   parseRecurringCreationRequest,
   parseShannons,
   type LiveCellResolver,
+  type OperatorAutomationDeployment,
   type RegisteredDeployment,
   type ScriptIdentity,
   type UnsignedDeadlineTransaction,
@@ -516,6 +517,7 @@ export class TransactionBuildService {
   readonly #chain: TransactionChainClient;
   readonly #genesisHash: string;
   readonly #resolutions: LockResolutionRecorder;
+  readonly #operatorDeployment: OperatorAutomationDeployment | undefined;
   #deployment: Promise<RegisteredDeployment> | undefined;
 
   constructor(
@@ -523,11 +525,13 @@ export class TransactionBuildService {
     chain: TransactionChainClient,
     genesisHash: string,
     resolutions: LockResolutionRecorder,
+    operatorDeployment?: OperatorAutomationDeployment,
   ) {
     this.#quotes = quotes;
     this.#chain = chain;
     this.#genesisHash = genesisHash;
     this.#resolutions = resolutions;
+    this.#operatorDeployment = operatorDeployment;
   }
 
   #loadDeployment(): Promise<RegisteredDeployment> {
@@ -807,6 +811,7 @@ export class TransactionBuildService {
       request.successLockHash,
       request.cancelLockHash,
       ...request.pledges.map(({ refundLockHash }) => refundLockHash),
+      ...(request.preferredExecutorLockHash ? [request.preferredExecutorLockHash] : []),
     ]);
     const pledged = request.pledges.reduce(
       (total, pledge) => parseShannons(total + parseShannons(pledge.amount)),
@@ -834,7 +839,23 @@ export class TransactionBuildService {
       reward: request.reward,
       creatorNonce: request.creatorNonce,
       creationFee: JOB_QUOTE_ASSUMPTIONS.deadline,
+      ...(this.#operatorDeployment === undefined
+        ? {}
+        : {
+            operator: {
+              deployment: this.#operatorDeployment,
+              preferredExecutorLockHash:
+                request.preferredExecutorLockHash ??
+                this.#operatorDeployment.defaultPreferredOperatorLockHash,
+            },
+          }),
     });
+    if (request.preferredExecutorLockHash !== undefined && this.#operatorDeployment === undefined) {
+      throw new ServiceUnavailableException({
+        status: "unavailable",
+        code: "OPERATOR_AUTOMATION_DEPLOYMENT_UNAVAILABLE",
+      });
+    }
     const tip = await this.#chain.getTipHeader();
     const response = envelope({
       operation: "create_deadline_job",
@@ -871,6 +892,7 @@ export class TransactionBuildService {
     const resolutions = verifiedResolutions(creation.resolutions, [
       request.ownerLockHash,
       request.recipientLockHash,
+      ...(request.preferredExecutorLockHash ? [request.preferredExecutorLockHash] : []),
     ]);
     requirePlainOutputCapacity(
       request.amount,
@@ -888,7 +910,23 @@ export class TransactionBuildService {
       reward: request.reward,
       creatorNonce: request.creatorNonce,
       creationFee: JOB_QUOTE_ASSUMPTIONS.recurring,
+      ...(this.#operatorDeployment === undefined
+        ? {}
+        : {
+            operator: {
+              deployment: this.#operatorDeployment,
+              preferredExecutorLockHash:
+                request.preferredExecutorLockHash ??
+                this.#operatorDeployment.defaultPreferredOperatorLockHash,
+            },
+          }),
     });
+    if (request.preferredExecutorLockHash !== undefined && this.#operatorDeployment === undefined) {
+      throw new ServiceUnavailableException({
+        status: "unavailable",
+        code: "OPERATOR_AUTOMATION_DEPLOYMENT_UNAVAILABLE",
+      });
+    }
     const tip = await this.#chain.getTipHeader();
     const response = envelope({
       operation: "create_recurring_job",
@@ -1312,6 +1350,7 @@ const deadlineBodySchema = {
     cancelLockHash: hashSchema,
     reward: decimalSchema,
     creatorNonce: decimalSchema,
+    preferredExecutorLockHash: hashSchema,
     lockResolutions: { type: "array", minItems: 1, maxItems: 32, items: scriptSchema },
   },
 };
@@ -1338,6 +1377,7 @@ const recurringBodySchema = {
     totalRuns: decimalSchema,
     reward: decimalSchema,
     creatorNonce: decimalSchema,
+    preferredExecutorLockHash: hashSchema,
     lockResolutions: { type: "array", minItems: 1, maxItems: 32, items: scriptSchema },
   },
 };

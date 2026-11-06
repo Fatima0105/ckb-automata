@@ -19,6 +19,7 @@ export interface RecurringCreationRequest {
   readonly totalRuns: string;
   readonly reward: string;
   readonly creatorNonce: string;
+  readonly preferredExecutorLockHash?: Hash32;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -52,11 +53,12 @@ export function parseRecurringCreationRequest(input: unknown): RecurringCreation
     "totalRuns",
     "reward",
     "creatorNonce",
+    "preferredExecutorLockHash",
   ] as const;
   if (Object.keys(request).some((key) => !keys.includes(key as (typeof keys)[number]))) {
     throw new TypeError("recurring request contains unsupported fields");
   }
-  if (keys.some((key) => !(key in request))) {
+  if (keys.some((key) => key !== "preferredExecutorLockHash" && !(key in request))) {
     throw new TypeError("recurring request is missing required fields");
   }
 
@@ -104,5 +106,13 @@ export function parseRecurringCreationRequest(input: unknown): RecurringCreation
     totalRuns: totalRuns.toString(),
     reward: reward.toString(),
     creatorNonce: parseSequence(decimal(request["creatorNonce"], "creatorNonce")).toString(),
+    ...(request["preferredExecutorLockHash"] === undefined
+      ? {}
+      : {
+          preferredExecutorLockHash: nonzeroHash(
+            request["preferredExecutorLockHash"],
+            "preferredExecutorLockHash",
+          ),
+        }),
   });
 }

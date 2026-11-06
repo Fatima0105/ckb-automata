@@ -15,6 +15,7 @@ const schemaSpecs = [
   { file: "job_v1", hashConstant: "JOB_V1_SCHEMA_SHA256" },
   { file: "campaign_v1", hashConstant: "CAMPAIGN_V1_SCHEMA_SHA256" },
   { file: "recurring_v1", hashConstant: "RECURRING_V1_SCHEMA_SHA256" },
+  { file: "operator_v1", hashConstant: "OPERATOR_V1_SCHEMA_SHA256" },
   { file: "dao_harvest_v1", hashConstant: "DAO_HARVEST_V1_SCHEMA_SHA256" },
   { file: "dao_harvest_v2", hashConstant: "DAO_HARVEST_V2_SCHEMA_SHA256" },
 ];

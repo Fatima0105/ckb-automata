@@ -1,6 +1,10 @@
 import type { ClientBlock } from "@ckb-ccc/shell";
 
-import { parseBlockNumber, type RegisteredDeployment } from "@ckb-automata/core";
+import {
+  parseBlockNumber,
+  type OperatorAutomationDeployment,
+  type RegisteredDeployment,
+} from "@ckb-automata/core";
 
 import type { CkbReadClient } from "../ckb-client.ts";
 import type { DaoHarvestV2Deployment } from "../dao-harvest-v2-adapter.ts";
@@ -27,6 +31,7 @@ interface LiveJobReconcilerOptions {
     readonly deployments: readonly DaoHarvestV2Deployment[];
     readonly indexer: Pick<DaoHarvestV2RevisionIndexer, "projectBlock">;
   };
+  readonly operatorDeployment?: OperatorAutomationDeployment;
 }
 
 type ReconciliationChainClient = Pick<
@@ -60,7 +65,7 @@ export class LiveJobReconciler {
   readonly #transitions: Pick<JobTransitionIndexer, "indexBlock">;
   readonly #logger: ReconciliationLogger;
   readonly #options: Required<Pick<LiveJobReconcilerOptions, "enabled" | "pollIntervalMs">> &
-    Pick<LiveJobReconcilerOptions, "loadDeployment" | "daoHarvestV2">;
+    Pick<LiveJobReconcilerOptions, "loadDeployment" | "daoHarvestV2" | "operatorDeployment">;
   #lastScanned: bigint | undefined;
   #running = false;
   #stopped = true;
@@ -88,6 +93,9 @@ export class LiveJobReconciler {
       loadDeployment: options.loadDeployment,
       pollIntervalMs,
       ...(options.daoHarvestV2 === undefined ? {} : { daoHarvestV2: options.daoHarvestV2 }),
+      ...(options.operatorDeployment === undefined
+        ? {}
+        : { operatorDeployment: options.operatorDeployment }),
     });
   }
 
@@ -150,6 +158,17 @@ export class LiveJobReconciler {
     const blockNumbers = new Set<bigint>();
     const scripts = [
       { script: exactJobLock(deployment), searchMode: "exact" as const },
+      ...(this.#options.operatorDeployment === undefined
+        ? []
+        : [
+            {
+              script: {
+                ...this.#options.operatorDeployment.contracts.jobLock.script,
+                args: "0x" as const,
+              },
+              searchMode: "exact" as const,
+            },
+          ]),
       ...(this.#options.daoHarvestV2 === undefined
         ? []
         : this.#options.daoHarvestV2.deployments.flatMap((harvestDeployment) => [

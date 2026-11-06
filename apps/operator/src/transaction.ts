@@ -47,6 +47,7 @@ import {
 
 import type { OperatorConfiguration } from "./config.ts";
 import type { LoadedOperatorManifest } from "./manifest.ts";
+import type { LoadedAutomationManifest } from "./automation-manifest.ts";
 import type { JsonRpcClient } from "./rpc.ts";
 import { record, string } from "./rpc.ts";
 
@@ -55,7 +56,7 @@ type Hex = `0x${string}`;
 export interface OperatorExecutionBundle {
   readonly schemaVersion: 1;
   readonly manifestSha256: string;
-  readonly operation: "fallback_claim";
+  readonly operation: "fallback_claim" | "scheduled_payment" | "recurring_payment";
   readonly jobId: Hash32;
   readonly transaction: UnsignedDeadlineTransaction;
 }
@@ -63,6 +64,7 @@ export interface OperatorExecutionBundle {
 interface ResolvedInput {
   readonly capacity: bigint;
   readonly lock: ScriptIdentity;
+  readonly type: ScriptIdentity | null;
   readonly data: Hex;
 }
 
@@ -97,8 +99,14 @@ function parseTransaction(value: unknown): UnsignedDeadlineTransaction {
 export async function loadExecutionBundle(path: string): Promise<OperatorExecutionBundle> {
   const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
   const value = record(parsed, "execution bundle");
-  if (value["schemaVersion"] !== 1 || value["operation"] !== "fallback_claim") {
-    throw new TypeError("execution bundle must be a fallback claim bundle");
+  const operation = value["operation"];
+  if (
+    value["schemaVersion"] !== 1 ||
+    (operation !== "fallback_claim" &&
+      operation !== "scheduled_payment" &&
+      operation !== "recurring_payment")
+  ) {
+    throw new TypeError("execution bundle operation is invalid");
   }
   const manifestSha256 = string(value["manifestSha256"], "manifestSha256");
   if (!/^[0-9a-f]{64}$/.test(manifestSha256)) {
@@ -107,7 +115,7 @@ export async function loadExecutionBundle(path: string): Promise<OperatorExecuti
   return Object.freeze({
     schemaVersion: 1 as const,
     manifestSha256,
-    operation: "fallback_claim" as const,
+    operation,
     jobId: parseHash32(string(value["jobId"], "jobId")),
     transaction: parseTransaction(value["transaction"]),
   });
@@ -149,6 +157,7 @@ async function resolveInputs(
       return Object.freeze({
         capacity: BigInt(string(output["capacity"], `input ${index} capacity`)),
         lock: rpcScript(output["lock"], `input ${index} lock`),
+        type: output["type"] == null ? null : rpcScript(output["type"], `input ${index} type`),
         data: string(data["content"], `input ${index} data content`) as Hex,
       });
     }),
@@ -266,6 +275,7 @@ export async function dryRunFallbackClaim(
   config: OperatorConfiguration,
   rpc: JsonRpcClient,
 ) {
+  if (bundle.operation !== "fallback_claim") throw new Error("bundle is not a fallback claim");
   if (!config.privateKey) throw new Error("OPERATOR_PRIVATE_KEY is required for a chain dry-run");
   if (bundle.manifestSha256 !== loadedManifest.sha256) {
     throw new Error("execution bundle targets a different deployment manifest");
@@ -481,6 +491,89 @@ export async function submitFallbackClaim(
   );
   const returned = parseHash32(
     await rpc.call<string>("send_transaction", [toRpcTransaction(signed), "passthrough"]),
+  );
+  if (returned !== evidence.transactionHash) {
+    throw new Error("CKB node returned a different transaction hash");
+  }
+  return Object.freeze({ ...evidence, status: "submitted" as const, transactionHash: returned });
+}
+
+export async function dryRunPaymentExecution(
+  bundle: OperatorExecutionBundle,
+  loadedManifest: LoadedAutomationManifest,
+  config: OperatorConfiguration,
+  rpc: JsonRpcClient,
+) {
+  if (bundle.operation === "fallback_claim") throw new Error("bundle is not a payment execution");
+  if (!config.privateKey) throw new Error("OPERATOR_PRIVATE_KEY is required for a chain dry-run");
+  if (bundle.manifestSha256 !== loadedManifest.sha256) {
+    throw new Error("execution bundle targets a different automation manifest");
+  }
+  const resolved = await resolveInputs(bundle.transaction, rpc);
+  const jobInput = resolved[0];
+  const feeInput = resolved[1];
+  if (!jobInput || !feeInput) throw new Error("payment execution inputs are incomplete");
+  const job = JobDataV1.unpack(hexToBytes(jobInput.data));
+  const jobId = hash32FromBytes(Uint8Array.from(job.job_id));
+  if (jobId !== bundle.jobId) throw new Error("payment Job identity does not match the bundle");
+  if (jobInput.lock.codeHash !== loadedManifest.deployment.contracts.jobLock.script.codeHash) {
+    throw new Error("payment input does not use the reviewed Job Lock");
+  }
+  const expectedPolicy =
+    bundle.operation === "scheduled_payment"
+      ? loadedManifest.deployment.contracts.deadlinePolicy.script.codeHash
+      : loadedManifest.deployment.contracts.recurringPolicy.script.codeHash;
+  if (jobInput.type?.codeHash !== expectedPolicy || jobInput.type.hashType !== "data1") {
+    throw new Error("payment input does not use the reviewed policy");
+  }
+  if (bundle.operation === "recurring_payment" && BigInt(job.remaining_runs.toString()) > 1n) {
+    const successor = bundle.transaction.outputs.find(
+      (output) => output.type?.codeHash === expectedPolicy && output.type.hashType === "data1",
+    );
+    if (successor === undefined) {
+      throw new Error("recurring successor does not use the reviewed policy");
+    }
+  }
+  if (feeInput.lock.args !== operatorLockArgs(config.privateKey)) {
+    throw new Error("operator private key does not control the payment fee input");
+  }
+  const networkFee =
+    resolved.reduce((total, input) => total + input.capacity, 0n) -
+    outputCapacity(bundle.transaction);
+  if (networkFee < 0n || networkFee > config.transactionFee) {
+    throw new Error("payment execution network fee exceeds the configured bound");
+  }
+  const dryRun = record(
+    await rpc.call("dry_run_transaction", [toRpcTransaction(bundle.transaction)]),
+    "dry-run result",
+  );
+  const cycles = BigInt(string(dryRun["cycles"], "dry-run cycles"));
+  return Object.freeze({
+    status: "ready" as const,
+    operation: bundle.operation,
+    jobId,
+    transactionHash: parseHash32(
+      rawTransactionToHash(
+        bundle.transaction as unknown as Parameters<typeof rawTransactionToHash>[0],
+      ),
+    ),
+    networkFee: networkFee.toString(),
+    dryRunCycles: cycles.toString(),
+  });
+}
+
+export async function submitPaymentExecution(
+  bundle: OperatorExecutionBundle,
+  loadedManifest: LoadedAutomationManifest,
+  config: OperatorConfiguration,
+  rpc: JsonRpcClient,
+) {
+  const evidence = await dryRunPaymentExecution(bundle, loadedManifest, config, rpc);
+  const returned = parseHash32(
+    await rpc.call<string>("send_transaction", [
+      toRpcTransaction(bundle.transaction),
+      "passthrough",
+    ]),
   );
   if (returned !== evidence.transactionHash) {
     throw new Error("CKB node returned a different transaction hash");

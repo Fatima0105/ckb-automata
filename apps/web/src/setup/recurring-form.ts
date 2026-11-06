@@ -25,6 +25,8 @@ export const RECURRING_INITIAL_DRAFT: SetupDraft = Object.freeze({
   amountCkb: "",
   firstExecutionAt: "",
   intervalMinutes: "",
+  operatorMode: "automatic",
+  preferredOperatorAddress: "",
   recipientAddress: "",
   runCount: "",
   title: "",
@@ -213,6 +215,21 @@ export async function validateRecurringStep(
     ) {
       errors["amountCkb"] =
         `Payment amount must be at least ${shannonsToCkb(resolvedRecipient.minimumCapacity)} CKB for this recipient address.`;
+    }
+    if (draft["operatorMode"] === "custom") {
+      const operatorAddress = required(
+        draft,
+        "preferredOperatorAddress",
+        "Enter the preferred operator address.",
+        errors,
+      );
+      if (operatorAddress) {
+        try {
+          await context.resolveLockHash(operatorAddress);
+        } catch {
+          errors["preferredOperatorAddress"] = "Enter a valid CKB testnet operator address.";
+        }
+      }
     }
   }
   if (step === "timing") {

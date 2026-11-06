@@ -6,6 +6,7 @@ import { serializeRawTransaction, serializeWitnessArgs } from "@nervosnetwork/ck
 
 import { parseHash32, parseOutPoint } from "./chain-values.ts";
 import { deploymentRegistry } from "./deployment-registry.ts";
+import type { OperatorAutomationDeployment } from "./operator-deployment.ts";
 import {
   assertDeadlineCompletion,
   buildDeadlineCreation,
@@ -17,6 +18,18 @@ const fixtureUrl = new URL(
   "../../../contracts/fixtures/deadline_creation_v1.json",
   import.meta.url,
 );
+
+function operatorContract(byte: string, index = "0") {
+  return {
+    script: { codeHash: parseHash32(`0x${byte.repeat(64)}`), hashType: "data1" as const },
+    cellDep: {
+      outPoint: { txHash: parseHash32(`0x${byte.repeat(64)}`), index: `0x${index}` as const },
+      depType: "code" as const,
+    },
+    binarySha256: byte.repeat(64),
+    sizeBytes: 1,
+  };
+}
 
 interface Fixture {
   readonly pledges: readonly {
@@ -245,3 +258,57 @@ test("deadline creation rejects unsafe pledge and timing inputs", async () => {
 });
 
 const CONTRACT_MINIMUM_MINUS_ONE = "6099999999";
+
+test("operator-bound deadline creation uses the preferred window without changing V1", async () => {
+  const { build: legacy } = await fixtureBuild();
+  const loaded = await deploymentRegistry.load(legacy.intent.genesisHash);
+  assert.equal(loaded.status, "ok");
+  if (loaded.status !== "ok") return;
+  const operator: OperatorAutomationDeployment = {
+    genesisHash: loaded.deployment.genesisHash,
+    manifestSha256: "a".repeat(64),
+    secp256k1Blake160: loaded.deployment.manifest.secp256k1Blake160,
+    contracts: {
+      jobLock: operatorContract("1", "1"),
+      deadlinePolicy: operatorContract("2", "2"),
+      recurringPolicy: operatorContract("3", "3"),
+    },
+    defaultPreferredOperatorLockHash: parseHash32(`0x${"44".repeat(32)}`),
+  };
+  const bound = buildDeadlineCreation({
+    deployment: loaded.deployment,
+    pledges: [
+      {
+        outPoint: legacy.intent.anchorOutPoint,
+        refundLockHash: legacy.intent.cancelLockHash,
+        amount: "8000000000",
+      },
+    ],
+    target: "8000000000",
+    deadlineBlock: "500",
+    successLockHash: legacy.intent.successLockHash,
+    cancelLockHash: legacy.intent.cancelLockHash,
+    reward: "10000000000",
+    creatorNonce: "7",
+    creationFee: {
+      transactionBytes: { minimum: "700", maximum: "900" },
+      feeRatePerKilobyte: { minimum: "1000", maximum: "2000" },
+    },
+    operator: {
+      deployment: operator,
+      preferredExecutorLockHash: operator.defaultPreferredOperatorLockHash,
+    },
+  });
+  assert.equal(bound.intent.version, 2);
+  assert.equal(bound.intent.takeoverBlock, "512");
+  assert.equal(
+    bound.transaction.outputs[1]?.lock.codeHash,
+    operator.contracts.jobLock.script.codeHash,
+  );
+  assert.equal(
+    bound.transaction.outputs[1]?.type?.codeHash,
+    operator.contracts.deadlinePolicy.script.codeHash,
+  );
+  assert.equal(legacy.intent.version, 1);
+  assert.equal(legacy.intent.takeoverBlock, undefined);
+});

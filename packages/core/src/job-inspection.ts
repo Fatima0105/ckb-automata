@@ -14,6 +14,7 @@ import {
   type Shannons,
   type SinceValue,
 } from "./chain-values.ts";
+import type { OperatorAutomationDeployment } from "./operator-deployment.ts";
 
 export const DEPLOYED_CONTRACT_NAMES = [
   "job-lock",
@@ -151,12 +152,12 @@ export type PolicyMetadata =
   | {
       readonly kind: "recurring";
       readonly scriptHash: Hash32;
-      readonly contract: "recurring-policy";
+      readonly contract: "recurring-policy" | "recurring-policy-v2";
     }
   | {
       readonly kind: "deadline";
       readonly scriptHash: Hash32;
-      readonly contract: "deadline-policy";
+      readonly contract: "deadline-policy" | "deadline-policy-v2";
       readonly campaignTypeHash: Hash32;
     }
   | {
@@ -174,6 +175,7 @@ export interface JobInspectionOptions {
   readonly manifest?: unknown;
   readonly expectedGenesisHash?: string;
   readonly policyScript?: unknown;
+  readonly operatorDeployment?: OperatorAutomationDeployment;
 }
 
 export interface JobSemanticIssue {
@@ -684,12 +686,34 @@ function classifyPolicy(
   scriptHash: Hash32,
   policyScript: ScriptIdentity | undefined,
   manifest: DeploymentManifest | undefined,
+  operatorDeployment: OperatorAutomationDeployment | undefined,
 ): PolicyMetadata {
   if (!policyScript) {
     return Object.freeze({ kind: "unresolved", scriptHash });
   }
   if (!manifest) {
     return Object.freeze({ kind: "unknown", scriptHash, codeHash: policyScript.codeHash });
+  }
+  if (
+    operatorDeployment !== undefined &&
+    policyScript.codeHash === operatorDeployment.contracts.recurringPolicy.script.codeHash &&
+    policyScript.hashType === operatorDeployment.contracts.recurringPolicy.script.hashType &&
+    policyScript.args === "0x"
+  ) {
+    return Object.freeze({ kind: "recurring", scriptHash, contract: "recurring-policy-v2" });
+  }
+  if (
+    operatorDeployment !== undefined &&
+    policyScript.codeHash === operatorDeployment.contracts.deadlinePolicy.script.codeHash &&
+    policyScript.hashType === operatorDeployment.contracts.deadlinePolicy.script.hashType &&
+    HASH_PATTERN.test(policyScript.args)
+  ) {
+    return Object.freeze({
+      kind: "deadline",
+      scriptHash,
+      contract: "deadline-policy-v2",
+      campaignTypeHash: parseHash32(policyScript.args),
+    });
   }
   if (
     policyScript.codeHash === manifest.contracts["recurring-policy"].codeHash &&
@@ -809,7 +833,7 @@ export function inspectJobData(
   return {
     status: "ok",
     job,
-    policy: classifyPolicy(committedScriptHash, policyScript, manifest),
+    policy: classifyPolicy(committedScriptHash, policyScript, manifest, options.operatorDeployment),
     ...(manifest ? { manifest } : {}),
   };
 }

@@ -5,6 +5,8 @@ import { AutomataMetrics } from "@ckb-automata/telemetry";
 import type { OperatorConfiguration } from "./config.ts";
 import type { LoadedOperatorManifest } from "./manifest.ts";
 import { verifyOperatorManifest } from "./manifest.ts";
+import type { LoadedAutomationManifest } from "./automation-manifest.ts";
+import { verifyAutomationManifest } from "./automation-manifest.ts";
 import type { JsonRpcClient } from "./rpc.ts";
 
 export interface OperatorServer {
@@ -20,7 +22,8 @@ function close(server: Server): Promise<void> {
 
 export async function startOperatorServer(options: {
   readonly config: OperatorConfiguration;
-  readonly manifest: LoadedOperatorManifest;
+  readonly manifest?: LoadedOperatorManifest;
+  readonly automationManifest?: LoadedAutomationManifest;
   readonly rpc: JsonRpcClient;
 }): Promise<OperatorServer> {
   const metrics = new AutomataMetrics();
@@ -28,11 +31,29 @@ export async function startOperatorServer(options: {
   let lastError: string | null = null;
   const refresh = async () => {
     try {
-      await verifyOperatorManifest(
-        options.manifest,
-        options.rpc,
-        options.config.expectedGenesisHash,
-      );
+      if (options.manifest === undefined && options.automationManifest === undefined) {
+        throw new Error("no operator manifest is configured");
+      }
+      await Promise.all([
+        ...(options.manifest === undefined
+          ? []
+          : [
+              verifyOperatorManifest(
+                options.manifest,
+                options.rpc,
+                options.config.expectedGenesisHash,
+              ),
+            ]),
+        ...(options.automationManifest === undefined
+          ? []
+          : [
+              verifyAutomationManifest(
+                options.automationManifest,
+                options.rpc,
+                options.config.expectedGenesisHash,
+              ),
+            ]),
+      ]);
       ready = true;
       lastError = null;
     } catch (error) {
@@ -63,7 +84,10 @@ export async function startOperatorServer(options: {
       response.end(
         JSON.stringify({
           status: ready ? "ready" : "not_ready",
-          manifestSha256: options.manifest.sha256,
+          manifests: {
+            harvest: options.manifest?.sha256 ?? null,
+            payments: options.automationManifest?.sha256 ?? null,
+          },
           lastError,
         }),
       );

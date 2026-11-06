@@ -6,7 +6,9 @@ const PRIVATE_KEY = /^0x[0-9a-f]{64}$/;
 export interface OperatorConfiguration {
   readonly rpcUrl: string;
   readonly indexerUrl: string;
-  readonly manifestPath: string;
+  readonly manifestPath?: string;
+  readonly automationManifestPath?: string;
+  readonly lockResolutionsPath?: string;
   readonly privateKey?: string;
   readonly minimumProfitMargin: bigint;
   readonly feeRatePerKilobyte: bigint;
@@ -52,7 +54,10 @@ export function parseOperatorConfiguration(
     throw new Error("CKB_GENESIS_HASH must be a lowercase 32-byte hash");
   }
   const manifestPath = input["OPERATOR_MANIFEST_PATH"];
-  if (!manifestPath) throw new Error("OPERATOR_MANIFEST_PATH is required");
+  const automationManifestPath = input["OPERATOR_AUTOMATION_MANIFEST_PATH"];
+  if (!manifestPath && !automationManifestPath) {
+    throw new Error("at least one operator manifest path is required");
+  }
   const transactionFee = decimal(
     input["OPERATOR_TRANSACTION_FEE"],
     50_000n,
@@ -64,7 +69,13 @@ export function parseOperatorConfiguration(
   return Object.freeze({
     rpcUrl: url(input["CKB_RPC_URL"], "CKB_RPC_URL"),
     indexerUrl: url(input["CKB_INDEXER_URL"], "CKB_INDEXER_URL"),
-    manifestPath: resolve(cwd, manifestPath),
+    ...(manifestPath ? { manifestPath: resolve(cwd, manifestPath) } : {}),
+    ...(automationManifestPath
+      ? { automationManifestPath: resolve(cwd, automationManifestPath) }
+      : {}),
+    ...(input["OPERATOR_LOCK_RESOLUTIONS_PATH"]
+      ? { lockResolutionsPath: resolve(cwd, input["OPERATOR_LOCK_RESOLUTIONS_PATH"]!) }
+      : {}),
     ...(privateKey ? { privateKey } : {}),
     minimumProfitMargin: decimal(
       input["OPERATOR_MINIMUM_PROFIT_MARGIN"],
@@ -91,7 +102,9 @@ export function publicOperatorConfiguration(config: OperatorConfiguration) {
   return Object.freeze({
     rpcUrl: config.rpcUrl,
     indexerUrl: config.indexerUrl,
-    manifestPath: config.manifestPath,
+    manifestPath: config.manifestPath ?? null,
+    automationManifestPath: config.automationManifestPath ?? null,
+    lockResolutionsPath: config.lockResolutionsPath ?? null,
     signingKeyConfigured: config.privateKey !== undefined,
     minimumProfitMargin: config.minimumProfitMargin.toString(),
     feeRatePerKilobyte: config.feeRatePerKilobyte.toString(),

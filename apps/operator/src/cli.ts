@@ -5,6 +5,8 @@ import { parseHash32, parseOutputIndex } from "@ckb-automata/core";
 
 import { parseOperatorConfiguration, publicOperatorConfiguration } from "./config.ts";
 import { discoverHarvestV2Jobs } from "./discovery.ts";
+import { discoverPaymentJobs } from "./discovery.ts";
+import { loadAutomationManifest, verifyAutomationManifest } from "./automation-manifest.ts";
 import { loadOperatorManifest, verifyOperatorManifest } from "./manifest.ts";
 import { PublicJsonRpcClient } from "./rpc.ts";
 import { startOperatorServer } from "./server.ts";
@@ -13,14 +15,17 @@ import {
   dryRunFallbackClaim,
   loadExecutionBundle,
   submitFallbackClaim,
+  dryRunPaymentExecution,
+  submitPaymentExecution,
 } from "./transaction.ts";
 import {
   buildFallbackClaimBundle,
   provisionOperatorAccumulator,
   writeExecutionBundle,
 } from "./workflow.ts";
+import { buildPaymentExecutionBundle, writePaymentExecutionBundle } from "./payment-workflow.ts";
 
-const PACKAGE_VERSION = "0.2.0";
+const PACKAGE_VERSION = "0.3.0";
 
 function jobOutPoint(value: string | undefined) {
   if (!value) throw new Error("--job-out-point is required");
@@ -48,8 +53,8 @@ function guide() {
       "config",
       "verify-manifest",
       "discover",
-      "setup",
-      "build --job-out-point <hash:index> --output <file>",
+      "setup (Harvest operator accumulator)",
+      "build --kind harvest|scheduled|recurring --job-out-point <hash:index> --output <file>",
       "dry-run --bundle <file>",
       "submit --bundle <file>",
       "confirm --tx-hash <hash>",
@@ -77,6 +82,7 @@ export async function runOperatorCli(
       output: { type: "string" },
       "job-out-point": { type: "string" },
       "tx-hash": { type: "string" },
+      kind: { type: "string", default: "all" },
       limit: { type: "string", default: "100" },
       version: { type: "boolean", short: "v" },
     },
@@ -95,52 +101,126 @@ export async function runOperatorCli(
     output(publicOperatorConfiguration(config));
     return 0;
   }
-  const loaded = await loadOperatorManifest(config.manifestPath);
-  if (loaded.manifest.releaseVersion !== PACKAGE_VERSION) {
+  const loaded =
+    config.manifestPath === undefined ? undefined : await loadOperatorManifest(config.manifestPath);
+  if (
+    loaded &&
+    loaded.manifest.releaseVersion !== "0.2.0" &&
+    loaded.manifest.releaseVersion !== PACKAGE_VERSION
+  ) {
     throw new Error(
       `operator ${PACKAGE_VERSION} cannot use manifest ${loaded.manifest.releaseVersion}`,
     );
   }
   const rpc = new PublicJsonRpcClient(config.rpcUrl);
   const indexer = new PublicJsonRpcClient(config.indexerUrl);
+  const kind = parsed.values.kind;
+  if (kind !== "all" && kind !== "harvest" && kind !== "scheduled" && kind !== "recurring") {
+    throw new Error("--kind must be all, harvest, scheduled, or recurring");
+  }
+  const automation =
+    config.automationManifestPath === undefined
+      ? undefined
+      : await loadAutomationManifest(config.automationManifestPath);
   if (command === "verify-manifest") {
-    output(await verifyOperatorManifest(loaded, rpc, config.expectedGenesisHash));
+    output({
+      ...(loaded === undefined
+        ? {}
+        : { harvest: await verifyOperatorManifest(loaded, rpc, config.expectedGenesisHash) }),
+      ...(automation === undefined
+        ? {}
+        : {
+            payments: await verifyAutomationManifest(automation, rpc, config.expectedGenesisHash),
+          }),
+    });
     return 0;
   }
   if (command === "discover") {
     const limit = Number(parsed.values.limit);
     output({
-      manifestSha256: loaded.sha256,
-      jobs: await discoverHarvestV2Jobs(loaded.manifest, indexer, limit),
+      manifests: { harvest: loaded?.sha256 ?? null, payments: automation?.sha256 ?? null },
+      jobs: Object.freeze([
+        ...(kind === "all" || kind === "harvest"
+          ? loaded === undefined
+            ? kind === "all"
+              ? []
+              : (() => {
+                  throw new Error("OPERATOR_MANIFEST_PATH is required for Harvest");
+                })()
+            : await discoverHarvestV2Jobs(loaded.manifest, indexer, limit)
+          : []),
+        ...(kind === "harvest"
+          ? []
+          : automation === undefined
+            ? kind === "all"
+              ? []
+              : (() => {
+                  throw new Error("OPERATOR_AUTOMATION_MANIFEST_PATH is required for payments");
+                })()
+            : await discoverPaymentJobs(automation, indexer, kind, limit)),
+      ]),
     });
     return 0;
   }
   if (command === "setup") {
+    if (loaded === undefined) throw new Error("OPERATOR_MANIFEST_PATH is required for Harvest");
     await verifyOperatorManifest(loaded, rpc, config.expectedGenesisHash);
     output(await provisionOperatorAccumulator(loaded, config, rpc, indexer));
     return 0;
   }
   if (command === "build") {
     if (!parsed.values.output) throw new Error("--output is required");
-    await verifyOperatorManifest(loaded, rpc, config.expectedGenesisHash);
-    const bundle = await buildFallbackClaimBundle(
-      jobOutPoint(parsed.values["job-out-point"]),
-      loaded,
-      config,
-      rpc,
-      indexer,
-    );
-    output(await writeExecutionBundle(parsed.values.output, bundle));
+    if (kind === "all") throw new Error("build requires --kind harvest, scheduled, or recurring");
+    if (kind === "harvest") {
+      if (loaded === undefined) throw new Error("OPERATOR_MANIFEST_PATH is required for Harvest");
+      await verifyOperatorManifest(loaded, rpc, config.expectedGenesisHash);
+      const bundle = await buildFallbackClaimBundle(
+        jobOutPoint(parsed.values["job-out-point"]),
+        loaded,
+        config,
+        rpc,
+        indexer,
+      );
+      output(await writeExecutionBundle(parsed.values.output, bundle));
+    } else {
+      if (automation === undefined) {
+        throw new Error("OPERATOR_AUTOMATION_MANIFEST_PATH is required for payments");
+      }
+      await verifyAutomationManifest(automation, rpc, config.expectedGenesisHash);
+      const bundle = await buildPaymentExecutionBundle(
+        jobOutPoint(parsed.values["job-out-point"]),
+        automation,
+        config,
+        rpc,
+        indexer,
+      );
+      if (bundle.operation !== `${kind}_payment`) {
+        throw new Error(`job is not a ${kind} payment`);
+      }
+      output(await writePaymentExecutionBundle(parsed.values.output, bundle));
+    }
     return 0;
   }
   if (command === "dry-run" || command === "submit") {
     if (!parsed.values.bundle) throw new Error("--bundle is required");
     const bundle = await loadExecutionBundle(parsed.values.bundle);
-    output(
-      command === "dry-run"
-        ? await dryRunFallbackClaim(bundle, loaded, config, rpc)
-        : await submitFallbackClaim(bundle, loaded, config, rpc),
-    );
+    if (bundle.operation === "fallback_claim") {
+      if (loaded === undefined) throw new Error("OPERATOR_MANIFEST_PATH is required for Harvest");
+      output(
+        command === "dry-run"
+          ? await dryRunFallbackClaim(bundle, loaded, config, rpc)
+          : await submitFallbackClaim(bundle, loaded, config, rpc),
+      );
+    } else {
+      if (automation === undefined) {
+        throw new Error("OPERATOR_AUTOMATION_MANIFEST_PATH is required for payments");
+      }
+      output(
+        command === "dry-run"
+          ? await dryRunPaymentExecution(bundle, automation, config, rpc)
+          : await submitPaymentExecution(bundle, automation, config, rpc),
+      );
+    }
     return 0;
   }
   if (command === "confirm") {
@@ -155,7 +235,12 @@ export async function runOperatorCli(
     return 0;
   }
   if (command === "serve") {
-    const server = await startOperatorServer({ config, manifest: loaded, rpc });
+    const server = await startOperatorServer({
+      config,
+      ...(loaded === undefined ? {} : { manifest: loaded }),
+      ...(automation === undefined ? {} : { automationManifest: automation }),
+      rpc,
+    });
     output({ status: "ready", port: server.port, version: PACKAGE_VERSION });
     await new Promise<void>((resolve) => {
       const stop = () => void server.close().then(resolve);

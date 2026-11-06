@@ -35,7 +35,7 @@ import {
   type DaoHarvestV2ProjectionDeployment,
   type DaoHarvestV2ProjectionEvent,
 } from "./dao-harvest-v2-projection.ts";
-import { DaoHarvestV2BlockIndexer } from "./dao-harvest-v2-indexer.ts";
+import { DaoHarvestV2RevisionIndexer } from "./dao-harvest-v2-indexer.ts";
 import type { DaoHarvestV2Deployment } from "../dao-harvest-v2-adapter.ts";
 
 const hash = (value: string): Hash32 => parseHash32(`0x${value.repeat(64)}`);
@@ -333,7 +333,7 @@ test("canonical V2 indexing resolves input evidence before storing a setup", asy
     preferredPrepareOperatorLockHash: hash("5"),
     fallbackPrepareOperatorLockHashes: [hash("4")],
   };
-  const indexer = new DaoHarvestV2BlockIndexer(
+  const indexer = new DaoHarvestV2RevisionIndexer(
     {
       getTransactionStatus: async (transactionHash) => {
         resolutions += 1;
@@ -357,7 +357,7 @@ test("canonical V2 indexing resolves input evidence before storing a setup", asy
       trackedOutPoints: async () => new Set(),
     },
     "ckb_testnet",
-    fullDeployment,
+    [fullDeployment],
   );
   const result = await indexer.projectBlock(block as never);
   assert.deepEqual(result, { events: 1, partial: 0, snapshots: 1 });

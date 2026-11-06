@@ -319,18 +319,20 @@ export class DaoHarvestV2TransactionAdapter implements DaoHarvestV2MutationAdapt
   readonly #chain: Pick<CkbReadClient, "getCellLive" | "getTipHeader"> &
     Partial<Pick<CkbReadClient, "getBlockByNumber" | "getTransactionStatus">>;
   readonly #database: AutomataDatabase | undefined;
-  readonly #deployment: DaoHarvestV2Deployment;
+  readonly #deployments: readonly DaoHarvestV2Deployment[];
   readonly #network: string | undefined;
 
   constructor(
     chain: Pick<CkbReadClient, "getCellLive" | "getTipHeader"> &
       Partial<Pick<CkbReadClient, "getBlockByNumber" | "getTransactionStatus">>,
-    deployment: DaoHarvestV2Deployment,
+    deployment: DaoHarvestV2Deployment | readonly DaoHarvestV2Deployment[],
     database?: AutomataDatabase,
     network?: string,
   ) {
     this.#chain = chain;
-    this.#deployment = deployment;
+    this.#deployments = Object.freeze(Array.isArray(deployment) ? [...deployment] : [deployment]);
+    if (this.#deployments.length === 0)
+      throw new RangeError("at least one V2 deployment is required");
     this.#database = database;
     this.#network = network;
   }
@@ -363,7 +365,7 @@ export class DaoHarvestV2TransactionAdapter implements DaoHarvestV2MutationAdapt
     ) {
       throw new BadRequestException("The submitted DAO harvest V2 transaction is not known on CKB");
     }
-    const deployment = this.#deployment;
+    const deployment = this.#deployments[0]!;
     const extraction = extractDaoHarvestV2ProjectionEvents(
       { header: tip, transactions: [observed.transaction] } as never,
       {
@@ -429,7 +431,7 @@ export class DaoHarvestV2TransactionAdapter implements DaoHarvestV2MutationAdapt
       throw new BadRequestException("the selected identity cell is not a plain owner cell");
     }
 
-    const deployment = this.#deployment;
+    const deployment = this.#deployments[0]!;
     const jobLock: ScriptIdentity = Object.freeze({
       codeHash: deployment.contracts.jobLock.codeHash,
       hashType: "data1",
@@ -720,7 +722,18 @@ export class DaoHarvestV2TransactionAdapter implements DaoHarvestV2MutationAdapt
     let progressValue = DaoHarvestProgressV2.unpack(progress);
     const seed = parseShannons(payloadValue.compensation_seed_capacity.toString());
     const principal = parseShannons(payloadValue.principal_capacity.toString());
-    const deployment = this.#deployment;
+    const vaultCodeHash = hash32FromBytes(Uint8Array.from(payloadValue.vault_lock_code_hash));
+    const compensationCodeHash = hash32FromBytes(
+      Uint8Array.from(payloadValue.compensation_lock_code_hash),
+    );
+    const deployment = this.#deployments.find(
+      (candidate) =>
+        candidate.contracts.vaultLock.codeHash === vaultCodeHash &&
+        candidate.contracts.compensationLock.codeHash === compensationCodeHash,
+    );
+    if (deployment === undefined) {
+      throw new ServiceUnavailableException("the automation contract revision is unavailable");
+    }
     const jobPoint = row.jobOutpoint === null ? undefined : storedOutPoint(row.jobOutpoint);
     const vaultPoint = row.vaultOutpoint === null ? undefined : storedOutPoint(row.vaultOutpoint);
     const compensationPoint = storedOutPoint(row.compensationOutpoint);

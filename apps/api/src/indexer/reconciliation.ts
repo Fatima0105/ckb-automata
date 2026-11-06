@@ -5,7 +5,7 @@ import { parseBlockNumber, type RegisteredDeployment } from "@ckb-automata/core"
 import type { CkbReadClient } from "../ckb-client.ts";
 import type { DaoHarvestV2Deployment } from "../dao-harvest-v2-adapter.ts";
 import type { CanonicalCheckpointStore } from "./checkpoints.ts";
-import type { DaoHarvestV2BlockIndexer } from "./dao-harvest-v2-indexer.ts";
+import type { DaoHarvestV2RevisionIndexer } from "./dao-harvest-v2-indexer.ts";
 import type { JobCellDiscovery } from "./job-discovery.ts";
 import type { JobTransitionIndexer } from "./job-transitions.ts";
 
@@ -24,8 +24,8 @@ interface LiveJobReconcilerOptions {
   readonly loadDeployment: () => Promise<RegisteredDeployment>;
   readonly pollIntervalMs?: number;
   readonly daoHarvestV2?: {
-    readonly deployment: DaoHarvestV2Deployment;
-    readonly indexer: Pick<DaoHarvestV2BlockIndexer, "projectBlock">;
+    readonly deployments: readonly DaoHarvestV2Deployment[];
+    readonly indexer: Pick<DaoHarvestV2RevisionIndexer, "projectBlock">;
   };
 }
 
@@ -152,10 +152,10 @@ export class LiveJobReconciler {
       { script: exactJobLock(deployment), searchMode: "exact" as const },
       ...(this.#options.daoHarvestV2 === undefined
         ? []
-        : [
+        : this.#options.daoHarvestV2.deployments.flatMap((harvestDeployment) => [
             {
               script: {
-                codeHash: this.#options.daoHarvestV2.deployment.contracts.jobLock.codeHash,
+                codeHash: harvestDeployment.contracts.jobLock.codeHash,
                 hashType: "data1" as const,
                 args: "0x" as const,
               },
@@ -163,7 +163,7 @@ export class LiveJobReconciler {
             },
             {
               script: {
-                codeHash: this.#options.daoHarvestV2.deployment.contracts.vaultLock.codeHash,
+                codeHash: harvestDeployment.contracts.vaultLock.codeHash,
                 hashType: "data1" as const,
                 args: "0x" as const,
               },
@@ -171,13 +171,13 @@ export class LiveJobReconciler {
             },
             {
               script: {
-                codeHash: this.#options.daoHarvestV2.deployment.contracts.compensationLock.codeHash,
+                codeHash: harvestDeployment.contracts.compensationLock.codeHash,
                 hashType: "data1" as const,
                 args: "0x" as const,
               },
               searchMode: "prefix" as const,
             },
-          ]),
+          ])),
     ];
     for (const { script, searchMode } of scripts) {
       let cursor: string | undefined;

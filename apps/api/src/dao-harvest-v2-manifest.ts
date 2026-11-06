@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 import { PERSONAL, blake2b, hexToBytes } from "@nervosnetwork/ckb-sdk-utils";
 
@@ -12,6 +13,7 @@ import type {
 } from "./dao-harvest-v2-adapter.ts";
 
 const SHA256 = /^[0-9a-f]{64}$/;
+const PREDECESSOR_MANIFEST = /^dao-harvest-v2-testnet-v[0-9]+\.[0-9]+\.[0-9]+\.json$/;
 
 interface AuditedContract extends DaoHarvestV2DeploymentContract {
   readonly binarySha256: string;
@@ -24,6 +26,7 @@ export interface DaoHarvestV2DeploymentManifest {
   readonly network: "ckb_testnet";
   readonly genesisHash: Hash32;
   readonly sourceRevision: string;
+  readonly predecessorManifests: readonly string[];
   readonly secp256k1Blake160: DaoHarvestV2Deployment["secp256k1Blake160"];
   readonly nervosDao: DaoHarvestV2Deployment["nervosDao"];
   readonly contracts: {
@@ -124,6 +127,15 @@ export function parseDaoHarvestV2DeploymentManifest(
   }
   const contracts = record(item["contracts"], "contracts");
   const operators = record(item["operators"], "operators");
+  const predecessors = item["predecessorManifests"] ?? [];
+  if (
+    !Array.isArray(predecessors) ||
+    predecessors.length > 8 ||
+    predecessors.some((entry) => typeof entry !== "string" || !PREDECESSOR_MANIFEST.test(entry)) ||
+    new Set(predecessors).size !== predecessors.length
+  ) {
+    throw new TypeError("predecessorManifests must contain unique versioned manifest filenames");
+  }
   const fallback = operators["fallbackPrepareLockHashes"];
   if (!Array.isArray(fallback) || fallback.length < 1 || fallback.length > 8) {
     throw new TypeError("fallbackPrepareLockHashes must contain 1 to 8 identities");
@@ -140,6 +152,7 @@ export function parseDaoHarvestV2DeploymentManifest(
     network: "ckb_testnet" as const,
     genesisHash: parseHash32(string(item["genesisHash"], "genesisHash")),
     sourceRevision,
+    predecessorManifests: Object.freeze(predecessors as string[]),
     secp256k1Blake160: systemScript(item["secp256k1Blake160"], "secp256k1Blake160", "type"),
     nervosDao: systemScript(item["nervosDao"], "nervosDao", "type"),
     contracts: Object.freeze({
@@ -155,6 +168,29 @@ export function parseDaoHarvestV2DeploymentManifest(
       fallbackPrepareLockHashes: Object.freeze(fallbackHashes),
     }),
   });
+}
+
+export async function loadVerifiedDaoHarvestV2Deployments(
+  path: string,
+  chain: Pick<CkbReadClient, "getCellLive" | "getGenesisHash">,
+  expectedGenesisHash: string,
+): Promise<readonly VerifiedDaoHarvestV2Deployment[]> {
+  const active = await loadVerifiedDaoHarvestV2Deployment(path, chain, expectedGenesisHash);
+  const predecessors = await Promise.all(
+    active.manifest.predecessorManifests.map((filename) =>
+      loadVerifiedDaoHarvestV2Deployment(
+        resolve(dirname(path), filename),
+        chain,
+        expectedGenesisHash,
+      ),
+    ),
+  );
+  const deployments = [active, ...predecessors];
+  const jobLocks = deployments.map(({ deployment }) => deployment.contracts.jobLock.codeHash);
+  if (new Set(jobLocks).size !== jobLocks.length) {
+    throw new Error("DAO harvest V2 deployment revisions must have unique Job Lock code hashes");
+  }
+  return Object.freeze(deployments);
 }
 
 function ckbDataHash(bytes: Uint8Array): Hash32 {

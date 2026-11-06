@@ -136,7 +136,14 @@ test("V2 setup rejects stale identity cells, wrong owners, weak principal, and e
   await assert.rejects(adapter.build("sweep", {}), /owner actions are not configured/);
 });
 
-function ownerActionFixture() {
+function ownerActionFixture(
+  options: {
+    readonly configuredDeployments?: readonly DaoHarvestV2Deployment[];
+    readonly sourceDeployment?: DaoHarvestV2Deployment;
+  } = {},
+) {
+  const sourceDeployment = options.sourceDeployment ?? deployment;
+  const configuredDeployments = options.configuredDeployments ?? [deployment];
   const transactionHash = hash("f");
   const identity = outPoint("e");
   let build: Awaited<ReturnType<DaoHarvestV2TransactionAdapter["build"]>>;
@@ -198,7 +205,7 @@ function ownerActionFixture() {
         } as never;
       },
     },
-    deployment,
+    configuredDeployments,
     database,
     "ckb_testnet",
   );
@@ -207,7 +214,7 @@ function ownerActionFixture() {
     identity,
     row,
     initialize: async () => {
-      build = await new DaoHarvestV2TransactionAdapter(chain(), deployment).build(
+      build = await new DaoHarvestV2TransactionAdapter(chain(), sourceDeployment).build(
         "setup",
         request(),
       );
@@ -234,6 +241,47 @@ test("V2 owner sweep preserves the job and reserve while paying only accumulated
   assert.equal(BigInt(transaction.outputs[2]!.capacity), 100n * 100_000_000n);
   assert.equal(scriptToHash(transaction.outputs[2]!.lock), payoutLockHash);
   assert.equal(result.review.accumulatedCompensation, (100n * 100_000_000n).toString());
+});
+
+test("V2 owner actions use the immutable revision committed by the existing automation", async () => {
+  const active = {
+    ...deployment,
+    contracts: {
+      ...deployment.contracts,
+      jobLock: { ...deployment.contracts.jobLock, codeHash: hash("b"), cellDep: cellDep("b") },
+      policy: { ...deployment.contracts.policy, codeHash: hash("c"), cellDep: cellDep("c") },
+      vaultLock: { ...deployment.contracts.vaultLock, codeHash: hash("d"), cellDep: cellDep("d") },
+      compensationLock: {
+        ...deployment.contracts.compensationLock,
+        codeHash: hash("e"),
+        cellDep: cellDep("e"),
+      },
+    },
+  } as DaoHarvestV2Deployment;
+  const fixture = ownerActionFixture({
+    configuredDeployments: [active, deployment],
+    sourceDeployment: deployment,
+  });
+  const setup = await fixture.initialize();
+  const result = await fixture.adapter.build("sweep", {
+    jobId: setup.jobId,
+    identityOutPoint: fixture.identity,
+    ownerLock: owner,
+    payoutLock: payout,
+  });
+  const dependencies = (result.transaction as UnsignedDeadlineTransaction).cellDeps;
+  assert.ok(
+    dependencies.some(
+      (dependency) =>
+        dependency.outPoint.txHash === deployment.contracts.policy.cellDep.outPoint.txHash,
+    ),
+  );
+  assert.ok(
+    dependencies.every(
+      (dependency) =>
+        dependency.outPoint.txHash !== active.contracts.policy.cellDep.outPoint.txHash,
+    ),
+  );
 });
 
 test("V2 owner rotation changes only operator commitments and compensation payload binding", async () => {

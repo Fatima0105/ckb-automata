@@ -1,13 +1,14 @@
 {
   "schemaVersion": 2,
-  "releaseVersion": "0.1.0",
+  "releaseVersion": "0.2.0",
   "network": "ckb_testnet",
   "genesisHash": "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
-  "sourceRevision": "8e35b25772dd826329db0e336e28686932dde112",
+  "sourceRevision": "9b0670fd3facda0c3c65eba8eea5bd72f93b4f9f",
+  "predecessorManifests": ["dao-harvest-v2-testnet-v0.1.0.json"],
   "deployment": {
-    "transactionHash": "0x494438d5a67653a58b7eedff7e6f5fb26e4ec35957bcd64643170df78172127e",
-    "blockHash": "0x1d1f3a570b2d8b72f7a0b505410dabf7148eba27c618a81944ce93cd0113d2e2",
-    "blockNumber": "0x15e7126"
+    "transactionHash": "0xa18b1b20b8bb65c577e6063825c249e04abfaac54fb6a1094e441e6d8fc1dbac",
+    "blockHash": "0xe7735e9f262d298cdf8ee26ca95a229da3ec1e27faf11862eab0ffa26a4d175e",
+    "blockNumber": "0x15eb71b"
   },
   "secp256k1Blake160": {
     "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
@@ -33,26 +34,26 @@
   },
   "contracts": {
     "jobLock": {
-      "codeHash": "0xdc6fc240435ac65a0fa191efda5540f67062ff2536d5ee72cd5fc12ba21b6c60",
+      "codeHash": "0xde712e0ffb7cf63cea259fd4bed54d554f4fcebd590e89289c25b7720a1f4718",
       "hashType": "data1",
-      "binarySha256": "f3b8124d5ab912563f0a5d3efe48e682f13cc8927828080d1b709125b9a51d37",
-      "sizeBytes": 36080,
+      "binarySha256": "549ccbf0e18a5b6dd2d33b99d3d7ab31ad86bdeba523e7e2a7594b88c8841b81",
+      "sizeBytes": 37888,
       "cellDep": {
         "outPoint": {
-          "txHash": "0x494438d5a67653a58b7eedff7e6f5fb26e4ec35957bcd64643170df78172127e",
+          "txHash": "0xa18b1b20b8bb65c577e6063825c249e04abfaac54fb6a1094e441e6d8fc1dbac",
           "index": "0x0"
         },
         "depType": "code"
       }
     },
     "policy": {
-      "codeHash": "0x6efb1ac409b9e9afe25747193361c940c6eeebf7ff1b2a93a7decafe33d267f0",
+      "codeHash": "0xca5111b51f41f15c4217a06f34790f79201e5ea1906b5651092c7e855bdb67c1",
       "hashType": "data1",
-      "binarySha256": "03f0aae78a77d65d15462f88941ca8878e6674b9486cedae02e9a65e5096d082",
-      "sizeBytes": 71848,
+      "binarySha256": "67c95bb1c1a3807ae8bcd6a971413ab3dd221219d69bb1f4c9c13a5e0b36b654",
+      "sizeBytes": 72240,
       "cellDep": {
         "outPoint": {
-          "txHash": "0x494438d5a67653a58b7eedff7e6f5fb26e4ec35957bcd64643170df78172127e",
+          "txHash": "0xa18b1b20b8bb65c577e6063825c249e04abfaac54fb6a1094e441e6d8fc1dbac",
           "index": "0x1"
         },
         "depType": "code"
@@ -65,20 +66,20 @@
       "sizeBytes": 34392,
       "cellDep": {
         "outPoint": {
-          "txHash": "0x494438d5a67653a58b7eedff7e6f5fb26e4ec35957bcd64643170df78172127e",
+          "txHash": "0xa18b1b20b8bb65c577e6063825c249e04abfaac54fb6a1094e441e6d8fc1dbac",
           "index": "0x2"
         },
         "depType": "code"
       }
     },
     "compensationLock": {
-      "codeHash": "0xa353b1f9f80821645127ac5933d380bad45741996ed8c07454ba791e65b6635a",
+      "codeHash": "0x72474406c6fd703e2c2544f0dab36ef74232055a836d01cb8ec2cb1cfd35c90e",
       "hashType": "data1",
-      "binarySha256": "b55c7127ef71ba113e65717624f68d3adb9e75f7d98c8f88d8c694fcf6409268",
-      "sizeBytes": 39208,
+      "binarySha256": "9671a20b8679670075aaa09567ea9f676d141e69a8869a44c9d0dfe47962e5c7",
+      "sizeBytes": 41544,
       "cellDep": {
         "outPoint": {
-          "txHash": "0x494438d5a67653a58b7eedff7e6f5fb26e4ec35957bcd64643170df78172127e",
+          "txHash": "0xa18b1b20b8bb65c577e6063825c249e04abfaac54fb6a1094e441e6d8fc1dbac",
           "index": "0x3"
         },
         "depType": "code"

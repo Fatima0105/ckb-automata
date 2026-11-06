@@ -113,13 +113,15 @@ test("reconciles V2 Job Cell blocks and projects each canonical block once", asy
       enabled: true,
       loadDeployment: async () => deployment,
       daoHarvestV2: {
-        deployment: {
-          contracts: {
-            jobLock: { codeHash: `0x${"55".repeat(32)}` },
-            vaultLock: { codeHash: `0x${"66".repeat(32)}` },
-            compensationLock: { codeHash: `0x${"77".repeat(32)}` },
-          },
-        } as never,
+        deployments: [
+          {
+            contracts: {
+              jobLock: { codeHash: `0x${"55".repeat(32)}` },
+              vaultLock: { codeHash: `0x${"66".repeat(32)}` },
+              compensationLock: { codeHash: `0x${"77".repeat(32)}` },
+            },
+          } as never,
+        ],
         indexer: {
           projectBlock: async (candidate: { header: { number: bigint } }) => {
             v2Blocks.push(candidate.header.number);

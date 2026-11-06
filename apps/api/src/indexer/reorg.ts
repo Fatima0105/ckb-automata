@@ -28,8 +28,8 @@ import type {
   DaoHarvestProjectionStore,
 } from "./dao-harvest-projection.ts";
 import type {
-  DaoHarvestV2BlockIndexer,
   DaoHarvestV2BlockProjectionResult,
+  DaoHarvestV2RevisionIndexer,
 } from "./dao-harvest-v2-indexer.ts";
 import { JobCellDiscovery, type JobDiscoveryResult } from "./job-discovery.ts";
 import { JobTransitionIndexer, type JobTransitionResult } from "./job-transitions.ts";
@@ -322,7 +322,7 @@ export class CanonicalBlockProjector {
     readonly metrics?: Pick<AutomataMetrics, "reorgsTotal">;
     readonly telemetry?: Pick<TelemetryRuntime, "withSpan">;
     readonly daoHarvest?: Pick<DaoHarvestProjectionStore, "projectBlock">;
-    readonly daoHarvestV2?: Pick<DaoHarvestV2BlockIndexer, "projectBlock" | "rollback">;
+    readonly daoHarvestV2?: Pick<DaoHarvestV2RevisionIndexer, "projectBlock" | "rollback">;
   };
 
   constructor(
@@ -335,7 +335,7 @@ export class CanonicalBlockProjector {
       readonly metrics?: Pick<AutomataMetrics, "reorgsTotal">;
       readonly telemetry?: Pick<TelemetryRuntime, "withSpan">;
       readonly daoHarvest?: Pick<DaoHarvestProjectionStore, "projectBlock">;
-      readonly daoHarvestV2?: Pick<DaoHarvestV2BlockIndexer, "projectBlock" | "rollback">;
+      readonly daoHarvestV2?: Pick<DaoHarvestV2RevisionIndexer, "projectBlock" | "rollback">;
     } = {},
   ) {
     this.#ckbClient = ckbClient;

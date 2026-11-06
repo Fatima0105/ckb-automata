@@ -23,7 +23,7 @@ import {
 } from "./dao-harvest-v2.ts";
 import { DaoHarvestV2TransactionAdapter } from "./dao-harvest-v2-adapter.ts";
 import {
-  loadVerifiedDaoHarvestV2Deployment,
+  loadVerifiedDaoHarvestV2Deployments,
   type VerifiedDaoHarvestV2Deployment,
 } from "./dao-harvest-v2-manifest.ts";
 import {
@@ -39,7 +39,7 @@ import { JobCellDiscovery } from "./indexer/job-discovery.ts";
 import { JobTransitionIndexer } from "./indexer/job-transitions.ts";
 import { CanonicalBlockProjector, JobProjectionRollback } from "./indexer/reorg.ts";
 import { DaoHarvestProjectionStore } from "./indexer/dao-harvest-projection.ts";
-import { DaoHarvestV2BlockIndexer } from "./indexer/dao-harvest-v2-indexer.ts";
+import { DaoHarvestV2RevisionIndexer } from "./indexer/dao-harvest-v2-indexer.ts";
 import { DaoHarvestV2ProjectionStore } from "./indexer/dao-harvest-v2-store.ts";
 import { LiveJobReconciler } from "./indexer/reconciliation.ts";
 import { LiveIndexerRuntime } from "./indexer/runtime.ts";
@@ -129,11 +129,11 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
         inject: [CkbClient],
         useFactory: async (
           ckbClient: CkbClient,
-        ): Promise<VerifiedDaoHarvestV2Deployment | undefined> => {
+        ): Promise<readonly VerifiedDaoHarvestV2Deployment[] | undefined> => {
           const path = environment.DAO_HARVEST_V2_MANIFEST_PATH;
           return path === undefined
             ? undefined
-            : loadVerifiedDaoHarvestV2Deployment(path, ckbClient, environment.CKB_GENESIS_HASH);
+            : loadVerifiedDaoHarvestV2Deployments(path, ckbClient, environment.CKB_GENESIS_HASH);
         },
       },
       {
@@ -202,15 +202,15 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
         useFactory: (
           ckbClient: CkbClient,
           store: DaoHarvestV2ProjectionStore,
-          loaded: VerifiedDaoHarvestV2Deployment | undefined,
+          loaded: readonly VerifiedDaoHarvestV2Deployment[] | undefined,
         ) =>
           loaded === undefined
             ? undefined
-            : new DaoHarvestV2BlockIndexer(
+            : new DaoHarvestV2RevisionIndexer(
                 ckbClient,
                 store,
                 environment.CKB_NETWORK,
-                loaded.deployment,
+                loaded.map(({ deployment }) => deployment),
               ),
       },
       {
@@ -235,14 +235,14 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
         useFactory: (
           ckbClient: CkbClient,
           databaseClient: DatabaseClient,
-          loaded: VerifiedDaoHarvestV2Deployment | undefined,
+          loaded: readonly VerifiedDaoHarvestV2Deployment[] | undefined,
         ) =>
           new DaoHarvestV2MutationService(
             loaded === undefined
               ? undefined
               : new DaoHarvestV2TransactionAdapter(
                   ckbClient,
-                  loaded.deployment,
+                  loaded.map(({ deployment }) => deployment),
                   databaseClient.database,
                   environment.CKB_NETWORK,
                 ),
@@ -267,7 +267,7 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           discovery: JobCellDiscovery,
           transitions: JobTransitionIndexer,
           daoHarvest: DaoHarvestProjectionStore,
-          daoHarvestV2: DaoHarvestV2BlockIndexer | undefined,
+          daoHarvestV2: DaoHarvestV2RevisionIndexer | undefined,
           telemetry: BackendTelemetry,
         ) =>
           new CanonicalBlockProjector(ckbClient, checkpoints, rollback, discovery, transitions, {
@@ -311,8 +311,8 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
           checkpoints: CanonicalCheckpointStore,
           discovery: JobCellDiscovery,
           transitions: JobTransitionIndexer,
-          daoHarvestV2: DaoHarvestV2BlockIndexer | undefined,
-          daoHarvestV2Deployment: VerifiedDaoHarvestV2Deployment | undefined,
+          daoHarvestV2: DaoHarvestV2RevisionIndexer | undefined,
+          daoHarvestV2Deployment: readonly VerifiedDaoHarvestV2Deployment[] | undefined,
           telemetry: BackendTelemetry,
         ) =>
           new LiveJobReconciler(ckbClient, checkpoints, discovery, transitions, telemetry.logger, {
@@ -328,7 +328,7 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
               ? {}
               : {
                   daoHarvestV2: {
-                    deployment: daoHarvestV2Deployment.deployment,
+                    deployments: daoHarvestV2Deployment.map(({ deployment }) => deployment),
                     indexer: daoHarvestV2,
                   },
                 }),

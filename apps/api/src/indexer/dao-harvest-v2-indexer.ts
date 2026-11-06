@@ -182,3 +182,40 @@ export class DaoHarvestV2BlockIndexer {
     return Object.freeze([...resolved.values()]);
   }
 }
+
+export class DaoHarvestV2RevisionIndexer {
+  readonly #indexers: readonly DaoHarvestV2BlockIndexer[];
+  readonly #store: Pick<DaoHarvestV2ProjectionStore, "reset" | "rollback">;
+
+  constructor(
+    chain: Pick<CkbReadClient, "getTransactionStatus">,
+    store: Pick<DaoHarvestV2ProjectionStore, "append" | "reset" | "rollback" | "trackedOutPoints">,
+    networkId: string,
+    deployments: readonly DaoHarvestV2Deployment[],
+  ) {
+    if (deployments.length === 0) throw new RangeError("at least one V2 deployment is required");
+    this.#store = store;
+    this.#indexers = Object.freeze(
+      deployments.map(
+        (deployment) => new DaoHarvestV2BlockIndexer(chain, store, networkId, deployment),
+      ),
+    );
+  }
+
+  async projectBlock(block: ClientBlock): Promise<DaoHarvestV2BlockProjectionResult> {
+    const results = await Promise.all(this.#indexers.map((indexer) => indexer.projectBlock(block)));
+    return Object.freeze({
+      events: results.reduce((total, result) => total + result.events, 0),
+      partial: results.reduce((total, result) => total + result.partial, 0),
+      snapshots: results.reduce((total, result) => total + result.snapshots, 0),
+    });
+  }
+
+  rollback(networkId: string, orphanedBlockHashes: readonly string[]) {
+    return this.#store.rollback(networkId, orphanedBlockHashes);
+  }
+
+  reset(networkId: string) {
+    return this.#store.reset(networkId);
+  }
+}

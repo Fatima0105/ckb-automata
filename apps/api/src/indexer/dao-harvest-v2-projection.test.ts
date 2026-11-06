@@ -310,6 +310,7 @@ test("canonical V2 indexing resolves input evidence before storing a setup", asy
   const { block } = setupBlock();
   const appended: DaoHarvestV2ProjectionEvent[][] = [];
   let resolutions = 0;
+  let trackedReads = 0;
   const fullDeployment: DaoHarvestV2Deployment = {
     genesisHash: hash("0"),
     secp256k1Blake160: {
@@ -347,6 +348,15 @@ test("canonical V2 indexing resolves input evidence before storing a setup", asy
     preferredPrepareOperatorLockHash: hash("5"),
     fallbackPrepareOperatorLockHashes: [hash("4")],
   };
+  const otherRevision: DaoHarvestV2Deployment = {
+    ...fullDeployment,
+    contracts: {
+      ...fullDeployment.contracts,
+      jobLock: { ...fullDeployment.contracts.jobLock, codeHash: hash("7") },
+      policy: { ...fullDeployment.contracts.policy, codeHash: hash("8") },
+      compensationLock: { ...fullDeployment.contracts.compensationLock, codeHash: hash("0") },
+    },
+  };
   const indexer = new DaoHarvestV2RevisionIndexer(
     {
       getTransactionStatus: async (transactionHash) => {
@@ -368,15 +378,19 @@ test("canonical V2 indexing resolves input evidence before storing a setup", asy
       },
       reset: async () => [],
       rollback: async () => [],
-      trackedOutPoints: async () => new Set(),
+      trackedOutPoints: async () => {
+        trackedReads += 1;
+        return new Set();
+      },
     },
     "ckb_testnet",
-    [fullDeployment],
+    [fullDeployment, otherRevision],
   );
   const result = await indexer.projectBlock(block as never);
   assert.deepEqual(result, { events: 1, partial: 0, snapshots: 1 });
   assert.equal(appended[0]?.[0]?.operation, "setup");
   assert.equal(resolutions, 1);
+  assert.equal(trackedReads, 1);
 
   const unrelated = await indexer.projectBlock({
     header: { hash: hash("8"), number: "0x65" },
@@ -392,6 +406,7 @@ test("canonical V2 indexing resolves input evidence before storing a setup", asy
   } as never);
   assert.deepEqual(unrelated, { events: 0, partial: 0, snapshots: 0 });
   assert.equal(resolutions, 1);
+  assert.equal(trackedReads, 2);
 });
 
 function absoluteSince(number: bigint): string {

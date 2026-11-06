@@ -96,8 +96,11 @@ export class DaoHarvestV2BlockIndexer {
     this.#deployment = projectionDeployment(networkId, deployment);
   }
 
-  async projectBlock(block: ClientBlock): Promise<DaoHarvestV2BlockProjectionResult> {
-    const resolved = await this.#resolveInputs(block);
+  async projectBlock(
+    block: ClientBlock,
+    trackedOutPoints?: ReadonlySet<string>,
+  ): Promise<DaoHarvestV2BlockProjectionResult> {
+    const resolved = await this.#resolveInputs(block, trackedOutPoints);
     const extraction = extractDaoHarvestV2ProjectionEvents(block, this.#deployment, resolved);
     if (extraction.malformed > 0) {
       throw new Error("canonical block contains a malformed DAO harvest V2 transition");
@@ -118,11 +121,16 @@ export class DaoHarvestV2BlockIndexer {
     return this.#store.reset(networkId);
   }
 
-  async #resolveInputs(block: ClientBlock): Promise<readonly DaoHarvestV2ResolvedInput[]> {
+  async #resolveInputs(
+    block: ClientBlock,
+    trackedOutPoints?: ReadonlySet<string>,
+  ): Promise<readonly DaoHarvestV2ResolvedInput[]> {
     const inBlock = new Map<string, ClientBlock["transactions"][number]>(
       block.transactions.map((transaction) => [transaction.hash().toString(), transaction]),
     );
-    const tracked = new Set(await this.#store.trackedOutPoints(this.#deployment.networkId));
+    const tracked = new Set(
+      trackedOutPoints ?? (await this.#store.trackedOutPoints(this.#deployment.networkId)),
+    );
     for (const transaction of block.transactions) {
       const transactionHash = transaction.hash().toString();
       transaction.outputs.forEach((output, outputIndex) => {
@@ -144,8 +152,6 @@ export class DaoHarvestV2BlockIndexer {
         (output) =>
           (output.type?.codeHash.toString() === this.#deployment.policy.codeHash &&
             output.type.hashType === this.#deployment.policy.hashType) ||
-          (output.lock.codeHash.toString() === this.#deployment.vaultLock.codeHash &&
-            output.lock.hashType === this.#deployment.vaultLock.hashType) ||
           (output.lock.codeHash.toString() === this.#deployment.compensationLock.codeHash &&
             output.lock.hashType === this.#deployment.compensationLock.hashType),
       );
@@ -185,7 +191,8 @@ export class DaoHarvestV2BlockIndexer {
 
 export class DaoHarvestV2RevisionIndexer {
   readonly #indexers: readonly DaoHarvestV2BlockIndexer[];
-  readonly #store: Pick<DaoHarvestV2ProjectionStore, "reset" | "rollback">;
+  readonly #networkId: string;
+  readonly #store: Pick<DaoHarvestV2ProjectionStore, "reset" | "rollback" | "trackedOutPoints">;
 
   constructor(
     chain: Pick<CkbReadClient, "getTransactionStatus">,
@@ -194,6 +201,7 @@ export class DaoHarvestV2RevisionIndexer {
     deployments: readonly DaoHarvestV2Deployment[],
   ) {
     if (deployments.length === 0) throw new RangeError("at least one V2 deployment is required");
+    this.#networkId = networkId;
     this.#store = store;
     this.#indexers = Object.freeze(
       deployments.map(
@@ -203,7 +211,11 @@ export class DaoHarvestV2RevisionIndexer {
   }
 
   async projectBlock(block: ClientBlock): Promise<DaoHarvestV2BlockProjectionResult> {
-    const results = await Promise.all(this.#indexers.map((indexer) => indexer.projectBlock(block)));
+    const trackedOutPoints = await this.#store.trackedOutPoints(this.#networkId);
+    const results: DaoHarvestV2BlockProjectionResult[] = [];
+    for (const indexer of this.#indexers) {
+      results.push(await indexer.projectBlock(block, trackedOutPoints));
+    }
     return Object.freeze({
       events: results.reduce((total, result) => total + result.events, 0),
       partial: results.reduce((total, result) => total + result.partial, 0),

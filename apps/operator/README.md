@@ -1,167 +1,226 @@
-# CKAutomata external operator
+# Host a CKAutomata external operator
 
-This package lets an independent operator process CKAutomata DAO Harvest, scheduled-payment, and recurring-payment jobs through public CKB testnet RPC and indexer endpoints. Execution does not depend on the CKAutomata API, database, Redis, or hosted executor credentials. The optional registry command uses the public API only to publish the operator's verified name, address, services, and hosted endpoint.
+This package lets an independent operator host a public CKAutomata identity and process supported CKB testnet automations without access to CKAutomata's private database, Redis, or hosted executor credentials.
 
-The user may choose a preferred operator. That operator can act at the scheduled time. If it does not act, another compatible operator can take over at the later block committed in the Job Cell. The contracts keep the recipient, amount, timing, DAO principal, redeposit, and service payment fixed.
+Hosting has two separate parts:
 
-## Requirements
+1. `serve` keeps a public identity, readiness, and metrics endpoint online so CKAutomata can verify and list the operator.
+2. The execution commands discover, build, dry-run, submit, and confirm transactions.
 
-- Node.js 24.11.1 and pnpm 12.5.1, or Docker
-- a dedicated CKB testnet private key
-- at least two plain live cells for that key after setup: one for the reward accumulator setup and one for later transaction fees
-- public CKB testnet RPC and indexer URLs
+The bundled `serve` command does **not** automatically submit transactions. Hosting and registration make the operator selectable; the operator must still run the execution commands or operate a separate scheduler that invokes them safely.
 
-Do not reuse a valuable wallet key. The operator refuses transaction fees above 50,000 shannons, verifies the chain genesis and every audited contract binary, and dry-runs the signed transaction before broadcasting it.
+## What can be advertised
 
-## Native setup
+The bundled operator supports scheduled and recurring payments as a preferred operator and as a later takeover operator.
 
-From a clean repository checkout:
+Use this default capability list:
+
+```env
+OPERATOR_SERVICES=deadline,recurring
+```
+
+Do not advertise `dao-harvest` merely because the CLI can claim an eligible Harvest fallback. A preferred DAO Harvest operator must also run the preparation step at the right time. The bundled manual Harvest flow currently covers permissionless fallback claims after takeover.
+
+Existing automations are never rewritten by registration, removal, downtime, or a name change. Their operator rules remain the rules committed when they were created.
+
+## Hosting requirements
+
+- A public HTTPS origin such as `https://my-ckautomata-operator.onrender.com`
+- Node.js `24.11.1` and pnpm `12.5.1`, or Docker
+- A dedicated CKB testnet private key
+- Public CKB testnet RPC and indexer access
+- Enough testnet CKB for network fees
+- A process that can remain available for health checks
+
+Never use a mainnet key or a wallet holding valuable funds. Store `OPERATOR_PRIVATE_KEY` as a hosting-platform secret, never in Git or a Docker image.
+
+## Required environment variables
+
+Start from [the environment example](../../deploy/operator/operator.env.example). A hosted payment operator needs these values:
+
+```env
+CKB_RPC_URL=https://testnet.ckbapp.dev/
+CKB_INDEXER_URL=https://testnet.ckbapp.dev/
+CKB_GENESIS_HASH=0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+OPERATOR_MANIFEST_PATH=deploy/manifests/dao-harvest-v2-testnet.json
+OPERATOR_AUTOMATION_MANIFEST_PATH=deploy/manifests/operator-automation-testnet.json
+OPERATOR_TRANSACTION_FEE=50000
+OPERATOR_FEE_RATE_PER_KILOBYTE=1000
+OPERATOR_MINIMUM_PROFIT_MARGIN=0
+OPERATOR_CONFIRMATION_DEPTH=5
+OPERATOR_NAME=Community Operator
+OPERATOR_PUBLIC_URL=https://your-public-operator.example
+CKAUTOMATA_API_URL=https://ckb-automata-api.onrender.com
+OPERATOR_SERVICES=deadline,recurring
+OPERATOR_PRIVATE_KEY=0xYOUR_TESTNET_PRIVATE_KEY
+```
+
+`OPERATOR_HEALTH_PORT` is platform-specific:
+
+- local or Docker Compose: `9464`
+- Render web service: `10000`
+- another platform: use the HTTP port assigned by that platform
+
+Amounts are shannons. `1 CKB = 100,000,000 shannons`.
+
+## Host on Render
+
+Render is a straightforward way to publish the required HTTPS endpoint. Its web services must listen on `0.0.0.0` and the service port. CKAutomata already listens on `0.0.0.0`; set `OPERATOR_HEALTH_PORT=10000` for Render.
+
+### 1. Fork and connect the repository
+
+1. Fork `https://github.com/Hallab7/ckb-automata` into your GitHub account.
+2. In Render, choose **New > Web Service**.
+3. Connect the fork and choose the branch you want to operate.
+4. Select the **Docker** runtime.
+5. Set the Dockerfile path to `deploy/docker/operator.Dockerfile`.
+
+### 2. Configure the service
+
+Use these service settings:
+
+| Setting                   | Value                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| Docker command            | `serve`                                                                      |
+| Health check path         | `/health/live`                                                               |
+| Port environment variable | `OPERATOR_HEALTH_PORT=10000`                                                 |
+| Auto-deploy               | Enabled only if you want every selected-branch update deployed automatically |
+
+Add every required environment variable from the previous section in Render's **Environment** page. Mark `OPERATOR_PRIVATE_KEY` as a secret value. Do not put it in `render.yaml`, the repository, or build arguments.
+
+Set `OPERATOR_PUBLIC_URL` to the final Render origin, for example:
+
+```env
+OPERATOR_PUBLIC_URL=https://my-ckautomata-operator.onrender.com
+```
+
+Deploy the service and wait for its health check to pass.
+
+### 3. Verify the public host
+
+Open these URLs using your own service origin:
+
+```text
+https://my-ckautomata-operator.onrender.com/health/live
+https://my-ckautomata-operator.onrender.com/health/ready
+https://my-ckautomata-operator.onrender.com/operator-info
+https://my-ckautomata-operator.onrender.com/metrics
+```
+
+Expected results:
+
+- `/health/live` returns HTTP `200` with `status: ok`.
+- `/health/ready` returns HTTP `200` with `status: ready` and the verified manifests.
+- `/operator-info` returns HTTP `200` with the name, CKB address, services, network, and manifest hashes you intend to publish.
+- `/metrics` returns Prometheus text.
+
+Do not register the operator if readiness or identity verification fails.
+
+### 4. Register the hosted operator
+
+Registration is performed once from a trusted local checkout using the same private key as the hosted service. The hosted endpoint must already be live.
 
 ```powershell
+git clone https://github.com/Hallab7/ckb-automata.git
+Set-Location ckb-automata
 corepack enable
 corepack prepare pnpm@12.5.1 --activate
 pnpm install --frozen-lockfile
 pnpm --filter @ckb-automata/operator... build
-
-$env:CKB_RPC_URL = "https://testnet.ckb.dev/rpc"
-$env:CKB_INDEXER_URL = "https://testnet.ckb.dev/indexer"
-$env:CKB_GENESIS_HASH = "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606"
-$env:OPERATOR_MANIFEST_PATH = "deploy/manifests/dao-harvest-v2-testnet.json"
-$env:OPERATOR_AUTOMATION_MANIFEST_PATH = "deploy/manifests/operator-automation-testnet.json"
-$env:OPERATOR_LOCK_RESOLUTIONS_PATH = "operator-locks.json"
-$env:OPERATOR_PRIVATE_KEY = "0x..."
 ```
 
-Check the public configuration and deployed code before spending anything:
+Load the same environment variables into that PowerShell session, then run:
 
 ```powershell
-pnpm operator config
 pnpm operator verify-manifest
+pnpm operator register
 ```
 
-Run the one-time Harvest accumulator setup (scheduled and recurring payments do not need an accumulator):
+The command signs a single-use off-chain authentication message. CKAutomata verifies the hosted address, wallet ownership, CKB testnet genesis, manifests, endpoint, and declared services. The private key is never sent to CKAutomata.
 
-```powershell
-pnpm operator setup
-```
+After registration, the operator appears by name in the preferred-operator list for new automations matching its declared services.
 
-If setup returns `submitted`, keep its transaction hash and wait for confirmation:
+### 5. Keep the host available
 
-```powershell
-pnpm operator confirm --tx-hash 0x...
-```
+CKAutomata checks the public endpoint periodically. After repeated failed checks, the operator is hidden from new selections. A successful later check makes it visible again. Existing automations are unaffected.
 
-Run `setup` again after confirmation. It must return `ready` with the live accumulator outpoint.
+Render free web services can spin down after 15 minutes without inbound traffic and can take time to wake. Use a non-sleeping service plan when operator availability matters. Do not rely on artificial high-frequency keepalive traffic as a substitute for suitable hosting.
 
-## Discover work
+Render documentation:
 
-List live V2 jobs:
+- [Web services and port binding](https://render.com/docs/web-services)
+- [Environment variables and secrets](https://render.com/docs/configure-environment-variables)
+- [Health checks](https://render.com/docs/health-checks)
+- [Free service limitations](https://render.com/docs/free)
 
-```powershell
-pnpm operator discover --kind all
-```
+## Host with Docker on a VPS
 
-Use the `txHash:index` outpoint of a prepared job to build an immutable review bundle:
-
-```powershell
-pnpm operator build --kind harvest --job-out-point 0x...:0x0 --output .\claim-bundle.json
-pnpm operator dry-run --bundle .\claim-bundle.json
-pnpm operator submit --bundle .\claim-bundle.json
-pnpm operator confirm --tx-hash 0x...
-```
-
-`build` only accepts a committed, live, prepared V2 job. It reloads the job, vault, compensation and credited preparer accumulator from chain data; verifies their commitments; calculates the DAO compensation from the inclusion headers; selects the next cycle when needed; and builds the fallback claim against the audited manifest. `dry-run` re-resolves every input and refuses redirection, excessive charges, stale inputs, early takeover, unprofitable execution, or transaction-limit violations.
-
-If another operator wins first, the bundle becomes stale and dry-run or submit stops. Discover the current jobs again. Never retry a stale bundle blindly.
-
-## Execute scheduled and recurring payments
-
-The payment contracts use the same preferred-then-takeover rule. Build with the job's actual kind:
-
-```powershell
-pnpm operator build --kind scheduled --job-out-point 0x...:0x0 --output .\payment.json
-pnpm operator build --kind recurring --job-out-point 0x...:0x0 --output .\payment.json
-pnpm operator dry-run --bundle .\payment.json
-pnpm operator submit --bundle .\payment.json
-```
-
-Payment jobs commit lock hashes. If a recipient script cannot be recovered from the creation transaction, provide it in `operator-locks.json` using RPC field names:
-
-```json
-[
-  {
-    "code_hash": "0x...",
-    "hash_type": "type",
-    "args": "0x..."
-  }
-]
-```
-
-The operator verifies every supplied script against the committed hash. The file cannot change the recipient. It only supplies the full script needed to construct the already-authorized output.
-
-## Docker
-
-Build from the repository root:
+A VPS or another always-on container host avoids free-service sleep. From the repository root:
 
 ```powershell
 Copy-Item deploy/operator/operator.env.example deploy/operator/operator.env
 docker build --file deploy/docker/operator.Dockerfile --tag ckautomata/operator:0.3.0 .
 docker run --rm --env-file deploy/operator/operator.env ckautomata/operator:0.3.0 verify-manifest
-```
-
-Mount a local directory when creating or reading a bundle:
-
-```powershell
-docker run --rm --env-file deploy/operator/operator.env --volume "${PWD}:/work" ckautomata/operator:0.3.0 build --kind scheduled --job-out-point 0x...:0x0 --output /work/payment.json
-```
-
-For a continuously supervised health endpoint, set the private key in
-`deploy/operator/operator.env` and run:
-
-```powershell
 docker compose --file deploy/operator/compose.yml up --detach --build
 ```
 
-## Register the hosted operator
+The Compose service binds only to `127.0.0.1:9464`. Put a TLS reverse proxy such as Caddy or Nginx in front of it and expose the HTTPS origin configured in `OPERATOR_PUBLIC_URL`. Do not expose the private key, env file, Docker socket, or host administration ports.
 
-Registration is optional. It makes a healthy operator available by name in CKAutomata's preferred-operator dropdown for new automations. It does not change existing jobs or their committed operator rules.
-
-Set these values before starting the public service:
-
-```env
-OPERATOR_NAME=Community Operator
-OPERATOR_PUBLIC_URL=https://operator.example
-CKAUTOMATA_API_URL=https://api.example
-OPERATOR_SERVICES=deadline,recurring
-```
-
-`OPERATOR_PUBLIC_URL` must be a public HTTPS origin. Route it to the operator health port through your hosting platform or TLS reverse proxy. Confirm that `GET /operator-info` and `GET /health/ready` return HTTP 200, then register:
+Check the container:
 
 ```powershell
-pnpm operator register
+docker compose --file deploy/operator/compose.yml ps
+docker compose --file deploy/operator/compose.yml logs --follow operator
 ```
 
-The command authenticates with the configured operator key through CKAutomata's single-use off-chain challenge. The API verifies that the hosted lock, CKB testnet genesis, manifest hashes, and capabilities match before adding the operator. It never receives the private key.
+Then verify the four public endpoints and run `pnpm operator register` from a trusted machine.
 
-The bundled operator can be listed for scheduled and recurring payments. Only add `dao-harvest` when the hosted runtime also implements preferred Harvest preparation; the bundled manual Harvest command currently handles permissionless fallback claims after takeover.
+## Process transactions
 
-Re-run `register` to refresh a changed name, endpoint, or capability list. Repeated health failures remove the operator from new dropdown choices without changing any automation that already exists on-chain.
-
-## Monitoring and shutdown
-
-Run the health server separately when supervising the operator:
+Hosting alone does not process a job. Use a fresh discovery result for each attempt:
 
 ```powershell
-pnpm operator serve
+pnpm operator discover --kind all
+pnpm operator build --kind scheduled --job-out-point 0xTRANSACTION_HASH:0x0 --output .\payment.json
+pnpm operator dry-run --bundle .\payment.json
+pnpm operator submit --bundle .\payment.json
+pnpm operator confirm --tx-hash 0xSUBMITTED_TRANSACTION_HASH
 ```
 
-- readiness: `GET /health/ready`
-- liveness: `GET /health/live`
-- metrics: `GET /metrics`
-- public registry identity: `GET /operator-info`
+Use `--kind recurring` for recurring payments and `--kind harvest` for an eligible DAO Harvest fallback claim. Harvest fallback claims also require the one-time accumulator setup:
 
-Before shutdown, stop starting new commands and retain every submitted transaction hash until it is committed or rejected. A submitted claim does not need this process to remain online, but confirmation must be checked before reusing funds or rebuilding work.
+```powershell
+pnpm operator setup
+```
 
-## Scope
+If setup submits a transaction, confirm it and run `setup` again until it reports `ready`.
 
-This release supports DAO Harvest V2 fallback claims and operator-bound scheduled and recurring payments. Harvest preparation remains limited by the job's approved prepare-operator set. Payment takeover opens to any compatible operator at the exact fallback block committed by the user.
+Never reuse an old bundle. Another operator or a changed chain state can consume one of its inputs first.
+
+## Update a hosted operator
+
+1. Pull or merge the reviewed CKAutomata release into the hosted branch.
+2. Read the release changes and confirm the manifest paths still match the intended network.
+3. Build locally and run `pnpm operator verify-manifest`.
+4. Deploy the new commit through the hosting platform.
+5. Wait for `/health/ready` and `/operator-info` to return HTTP `200`.
+6. Re-run `pnpm operator register` if the name, URL, services, key, or published manifests changed.
+7. Confirm the operator appears in CKAutomata before accepting new preferred work.
+
+Do not rotate the key casually. A different key produces a different operator address and registration. Existing automations that committed the old address do not move to the new one.
+
+## Remove a host
+
+Stopping the service eventually hides it, but clean removal should use the authenticated registry delete endpoint or a future operator CLI removal command. Keep the old key available until every automation that selected it has completed or reached takeover eligibility.
+
+## Security and operational checklist
+
+- Use a dedicated CKB testnet key.
+- Keep the private key only in runtime secrets and a trusted registration shell.
+- Verify manifests before registration and before building transactions.
+- Publish only services the running operator can actually perform.
+- Use `/health/live` for platform health checks and `/health/ready` for operator readiness.
+- Review and dry-run the exact bundle before every submission.
+- Keep submitted transaction hashes until they are committed or rejected.
+- Monitor CKB balance, failed submissions, stale bundles, and endpoint availability.
+- Use a non-sleeping host when users depend on the preferred execution window.

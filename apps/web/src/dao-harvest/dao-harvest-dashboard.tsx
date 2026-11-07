@@ -14,12 +14,14 @@ import {
 import { Button, InlineNotice } from "@ckb-automata/ui";
 
 import { useWalletSession } from "../ccc/session.tsx";
+import type { DashboardMode } from "../dashboard/dashboard-view.tsx";
 import { browserWebEnvironment } from "../environment.ts";
 import { readAutomationTitles } from "../setup/automation-title.ts";
+import { publicOnlyDaoAutomations, visibleDaoAutomations } from "./dashboard-visibility.ts";
 import { daoHarvestPresentation, formatHarvestPrincipal } from "./presentation.ts";
 import { daoHarvestV2Presentation, harvestV2Amount } from "./v2-presentation.ts";
 
-export function DaoHarvestDashboard() {
+export function DaoHarvestDashboard({ mode }: Readonly<{ mode: DashboardMode }>) {
   const session = useWalletSession();
   const client = useMemo(() => {
     try {
@@ -61,18 +63,11 @@ export function DaoHarvestDashboard() {
     };
   }, [client, retry]);
 
-  const visibleItems =
-    session.status === "ready" && session.ownerLockHash !== undefined
-      ? items.filter((item) => item.ownerLockHash === session.ownerLockHash)
-      : items;
-  const visiblePending =
-    session.status === "ready" && session.ownerLockHash !== undefined
-      ? pendingItems.filter((item) => item.ownerLockHash === session.ownerLockHash)
-      : pendingItems;
-  const visibleV2Items =
-    session.status === "ready" && session.ownerLockHash !== undefined
-      ? v2Items.filter((item) => item.ownerLockHash === session.ownerLockHash)
-      : v2Items;
+  const ownerLockHash = session.status === "ready" ? session.ownerLockHash : undefined;
+  const visibleItems = visibleDaoAutomations(items, mode, ownerLockHash);
+  const visiblePending = visibleDaoAutomations(pendingItems, mode, ownerLockHash);
+  const visibleV2Items = visibleDaoAutomations(v2Items, mode, ownerLockHash);
+  const visibleV2PendingItems = publicOnlyDaoAutomations(v2PendingItems, mode);
 
   return (
     <section className="harvest-dashboard" aria-labelledby="harvest-dashboard-title">
@@ -115,7 +110,7 @@ export function DaoHarvestDashboard() {
       visibleItems.length === 0 &&
       visiblePending.length === 0 &&
       visibleV2Items.length === 0 &&
-      v2PendingItems.length === 0 ? (
+      visibleV2PendingItems.length === 0 ? (
         <div className="harvest-dashboard__empty">
           <p>No DAO compensation automations yet.</p>
         </div>
@@ -124,9 +119,9 @@ export function DaoHarvestDashboard() {
       (visibleItems.length > 0 ||
         visiblePending.length > 0 ||
         visibleV2Items.length > 0 ||
-        v2PendingItems.length > 0) ? (
+        visibleV2PendingItems.length > 0) ? (
         <div className="harvest-dashboard__rows">
-          {v2PendingItems.map((item) => (
+          {visibleV2PendingItems.map((item) => (
             <div className="harvest-row harvest-row--pending" key={item.transactionHash}>
               <div>
                 <strong>Harvest compensation</strong>

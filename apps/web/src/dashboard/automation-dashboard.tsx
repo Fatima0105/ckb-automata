@@ -334,7 +334,7 @@ export function AutomationDashboard() {
         templateFilter={templateFilter}
         titles={titles}
       />
-      <DaoHarvestDashboard />
+      <DaoHarvestDashboard mode={mode} />
     </>
   );
 }

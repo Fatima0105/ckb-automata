@@ -1,6 +1,6 @@
 # Host a CKAutomata external operator
 
-This package lets an independent operator host a public CKAutomata identity and process supported CKB testnet automations without access to CKAutomata's private database, Redis, or hosted executor credentials.
+This package lets an independent operator host a public CKAutomata identity and process supported CKB testnet automations.
 
 Hosting has two separate parts:
 

@@ -11,7 +11,7 @@ RUN npm install --global pnpm@12.5.1 && pnpm --version
 COPY . .
 
 RUN pnpm install --frozen-lockfile --filter @ckb-automata/operator... \
-    && pnpm --filter @ckb-automata/operator build \
+    && pnpm --filter @ckb-automata/operator... build \
     && pnpm store prune
 
 ENV NODE_ENV=production

@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 
+import { Address, Script } from "@ckb-ccc/shell";
 import { AutomataMetrics } from "@ckb-automata/telemetry";
 
 import type { OperatorConfiguration } from "./config.ts";
@@ -8,6 +9,8 @@ import { verifyOperatorManifest } from "./manifest.ts";
 import type { LoadedAutomationManifest } from "./automation-manifest.ts";
 import { verifyAutomationManifest } from "./automation-manifest.ts";
 import type { JsonRpcClient } from "./rpc.ts";
+import { operatorIdentityLock } from "./registration.ts";
+import { OPERATOR_PACKAGE_VERSION } from "./version.ts";
 
 export interface OperatorServer {
   readonly port: number;
@@ -89,6 +92,60 @@ export async function startOperatorServer(options: {
             payments: options.automationManifest?.sha256 ?? null,
           },
           lastError,
+        }),
+      );
+      return;
+    }
+    if (request.url === "/operator-info") {
+      const privateKey = options.config.privateKey;
+      const name = options.config.operatorName;
+      const genesisHash = options.config.expectedGenesisHash;
+      if (!ready || !privateKey || !name || !genesisHash) {
+        response.writeHead(503, {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        });
+        response.end(JSON.stringify({ status: "not_ready" }));
+        return;
+      }
+      const lock = Script.from(operatorIdentityLock(privateKey, options.manifest));
+      const compatible = new Set([
+        ...(options.manifest === undefined ? [] : (["dao-harvest"] as const)),
+        ...(options.automationManifest === undefined ? [] : (["deadline", "recurring"] as const)),
+      ]);
+      const services =
+        options.config.operatorServices ??
+        (options.automationManifest === undefined ? [] : (["deadline", "recurring"] as const));
+      if (services.length === 0 || services.some((service) => !compatible.has(service))) {
+        response.writeHead(503, {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        });
+        response.end(JSON.stringify({ status: "not_ready" }));
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      response.end(
+        JSON.stringify({
+          status: "ready",
+          name,
+          version: OPERATOR_PACKAGE_VERSION,
+          network: "ckb_testnet",
+          genesisHash,
+          identity: {
+            lockHash: lock.hash(),
+            address: new Address(lock, "ckt").toString(),
+            lock: {
+              codeHash: lock.codeHash,
+              hashType: lock.hashType,
+              args: lock.args,
+            },
+          },
+          services,
+          manifests: {
+            harvest: options.manifest?.sha256 ?? null,
+            payments: options.automationManifest?.sha256 ?? null,
+          },
         }),
       );
       return;

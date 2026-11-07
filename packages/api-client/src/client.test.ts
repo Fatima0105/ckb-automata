@@ -165,6 +165,28 @@ test("revokes settings sessions with bearer authentication", async () => {
   assert.equal(requests[0]?.headers.get("authorization"), "Bearer session-token");
 });
 
+test("lists and manages verified external operators", async () => {
+  const requests: Request[] = [];
+  const client = createApiClient({
+    baseUrl: "https://api.example.test/",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(requests.length === 1 ? { operators: [] } : { removed: true });
+    },
+  });
+
+  await client.listOperators({ service: "recurring" });
+  await client.registerOperator("operator-session", { endpoint: "https://operator.example" });
+  await client.removeOperator("operator-session");
+
+  assert.equal(requests[0]?.url, "https://api.example.test/v1/operators?service=recurring");
+  assert.equal(requests[1]?.method, "PUT");
+  assert.equal(requests[1]?.headers.get("authorization"), "Bearer operator-session");
+  assert.deepEqual(await requests[1]?.json(), { endpoint: "https://operator.example" });
+  assert.equal(requests[2]?.method, "DELETE");
+  assert.equal(requests[2]?.headers.get("authorization"), "Bearer operator-session");
+});
+
 test("exposes structured API failures", async () => {
   const client = createApiClient({
     baseUrl: "https://api.example.test/",

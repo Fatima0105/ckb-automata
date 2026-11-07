@@ -61,6 +61,8 @@ export interface ApiDaoHarvestBuild {
 }
 export type ApiAuthChallenge = ApiSuccess<"AuthController_issue">;
 export type ApiAuthSession = ApiSuccess<"AuthController_verify">;
+export type ApiOperatorList = ApiSuccess<"OperatorRegistryController_list">;
+export type ApiOperatorRegistration = ApiSuccess<"OperatorRegistryController_register">;
 export type ApiNotificationPreferences = ApiSuccess<"NotificationPreferencesController_get">;
 export type ApiWebhookList = ApiSuccess<"WebhookController_list">;
 export type ApiWebhookRegistration = ApiSuccess<"WebhookController_register">;
@@ -109,6 +111,28 @@ export class AutomataApiClient {
 
   network(): Promise<ApiSuccess<"NetworkMetadataController_get">> {
     return this.#request("v1/network");
+  }
+
+  listOperators(query?: ApiQuery<"OperatorRegistryController_list">): Promise<ApiOperatorList> {
+    return this.#request("v1/operators", { query });
+  }
+
+  registerOperator(
+    sessionToken: string,
+    body: ApiRequestBody<"OperatorRegistryController_register">,
+  ): Promise<ApiOperatorRegistration> {
+    return this.#request("v1/operators/registration", {
+      body,
+      headers: { authorization: `Bearer ${sessionToken}` },
+      method: "PUT",
+    });
+  }
+
+  removeOperator(sessionToken: string): Promise<ApiSuccess<"OperatorRegistryController_remove">> {
+    return this.#request("v1/operators/registration", {
+      headers: { authorization: `Bearer ${sessionToken}` },
+      method: "DELETE",
+    });
   }
 
   templates(): Promise<ApiTemplates> {

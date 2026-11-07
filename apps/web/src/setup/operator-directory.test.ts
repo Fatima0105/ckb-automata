@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   DEFAULT_OPERATOR_DRAFT,
+  mergePublicOperators,
   operatorDraftFields,
   PUBLIC_OPERATORS,
+  registeredPublicOperators,
   selectedOperatorId,
 } from "./operator-directory.ts";
 
@@ -39,4 +41,49 @@ test("selecting None clears an explicit operator preference", () => {
   assert.equal(selected["preferredOperatorId"], "none");
   assert.equal(selected["operatorMode"], "automatic");
   assert.equal(selectedOperatorId(selected), "none");
+});
+
+test("verified registry operators merge without replacing built-in operators", () => {
+  const registered = registeredPublicOperators({
+    operators: [
+      {
+        id: `registry:0x${"11".repeat(32)}`,
+        name: "Community Operator",
+        address: "ckt1qyq0venxvenxvenxvenxvenxvenxvenx3nw9x9",
+        services: ["deadline", "recurring"],
+        status: "active",
+      },
+      {
+        id: `registry:0x${"22".repeat(32)}`,
+        name: "Duplicate",
+        address: PUBLIC_OPERATORS[0]?.address,
+        services: ["deadline"],
+        status: "active",
+      },
+    ],
+  });
+  const operators = mergePublicOperators(registered);
+  assert.equal(operators.length, 3);
+  assert.equal(operators[2]?.name, "Community Operator");
+  const selected = operatorDraftFields(operators[2]!.id, operators);
+  assert.equal(selected["preferredOperatorAddress"], operators[2]?.address);
+  assert.equal(selected["backupOperatorAddress"], PUBLIC_OPERATORS[0]?.address);
+});
+
+test("malformed or inactive registry entries are ignored", () => {
+  assert.deepEqual(
+    registeredPublicOperators({
+      operators: [
+        { id: "bad", name: "Bad", address: "ckt1bad", services: [], status: "active" },
+        {
+          id: `registry:0x${"33".repeat(32)}`,
+          name: "Offline",
+          address: "ckt1qyq0venxvenxvenxvenxvenxvenxvenx3nw9x9",
+          services: ["deadline"],
+          status: "offline",
+        },
+      ],
+    }),
+    [],
+  );
 });

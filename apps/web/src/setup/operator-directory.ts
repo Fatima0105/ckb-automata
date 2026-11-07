@@ -1,6 +1,6 @@
 import type { SetupDraft } from "./setup-flow.ts";
 
-export type PublicOperatorId = "operator-a" | "operator-b";
+export type PublicOperatorId = string;
 export type OperatorSelectionId = "none" | PublicOperatorId;
 
 export interface PublicOperator {
@@ -8,6 +8,7 @@ export interface PublicOperator {
   readonly id: PublicOperatorId;
   readonly name: string;
   readonly status: "active";
+  readonly services?: readonly ("dao-harvest" | "deadline" | "recurring")[];
 }
 
 export const PUBLIC_OPERATORS = Object.freeze([
@@ -27,17 +28,76 @@ export const PUBLIC_OPERATORS = Object.freeze([
 
 export const DEFAULT_OPERATOR_ID: OperatorSelectionId = "none";
 
-export function selectedOperatorId(draft: SetupDraft): OperatorSelectionId {
+export function registeredPublicOperators(value: unknown): readonly PublicOperator[] {
+  if (typeof value !== "object" || value === null || !("operators" in value)) return [];
+  const operators = (value as { operators?: unknown }).operators;
+  if (!Array.isArray(operators)) return [];
+  return Object.freeze(
+    operators.flatMap((item): PublicOperator[] => {
+      if (typeof item !== "object" || item === null) return [];
+      const operator = item as Readonly<Record<string, unknown>>;
+      const services = operator["services"];
+      if (
+        typeof operator["id"] !== "string" ||
+        !/^registry:0x[0-9a-f]{64}$/.test(operator["id"]) ||
+        typeof operator["name"] !== "string" ||
+        operator["name"].length < 2 ||
+        typeof operator["address"] !== "string" ||
+        !/^ckt1[0-9a-z]{20,124}$/.test(operator["address"]) ||
+        operator["status"] !== "active" ||
+        !Array.isArray(services) ||
+        services.length < 1 ||
+        services.some(
+          (service) =>
+            service !== "dao-harvest" && service !== "deadline" && service !== "recurring",
+        )
+      ) {
+        return [];
+      }
+      return [
+        Object.freeze({
+          id: operator["id"],
+          name: operator["name"],
+          address: operator["address"],
+          status: "active" as const,
+          services: Object.freeze(services as ("dao-harvest" | "deadline" | "recurring")[]),
+        }),
+      ];
+    }),
+  );
+}
+
+export function mergePublicOperators(
+  registered: readonly PublicOperator[],
+): readonly PublicOperator[] {
+  const seenAddresses = new Set<string>(PUBLIC_OPERATORS.map(({ address }) => address));
+  return Object.freeze([
+    ...PUBLIC_OPERATORS,
+    ...registered.filter(({ address }) => {
+      if (seenAddresses.has(address)) return false;
+      seenAddresses.add(address);
+      return true;
+    }),
+  ]);
+}
+
+export function selectedOperatorId(
+  draft: SetupDraft,
+  operators: readonly PublicOperator[] = PUBLIC_OPERATORS,
+): OperatorSelectionId {
   const selected = draft["preferredOperatorId"];
   if (selected === "none" || draft["operatorMode"] === "automatic") return "none";
-  if (PUBLIC_OPERATORS.some(({ id }) => id === selected)) return selected as PublicOperatorId;
-  const matchingAddress = PUBLIC_OPERATORS.find(
+  if (operators.some(({ id }) => id === selected)) return selected ?? DEFAULT_OPERATOR_ID;
+  const matchingAddress = operators.find(
     ({ address }) => address === draft["preferredOperatorAddress"],
   );
   return matchingAddress?.id ?? DEFAULT_OPERATOR_ID;
 }
 
-export function operatorDraftFields(id: OperatorSelectionId): Readonly<Record<string, string>> {
+export function operatorDraftFields(
+  id: OperatorSelectionId,
+  operators: readonly PublicOperator[] = PUBLIC_OPERATORS,
+): Readonly<Record<string, string>> {
   if (id === "none") {
     return Object.freeze({
       operatorMode: "automatic",
@@ -46,9 +106,9 @@ export function operatorDraftFields(id: OperatorSelectionId): Readonly<Record<st
       backupOperatorAddress: "",
     });
   }
-  const preferred = PUBLIC_OPERATORS.find((operator) => operator.id === id);
+  const preferred = operators.find((operator) => operator.id === id);
   if (preferred === undefined) throw new TypeError("Choose an available operator.");
-  const backup = PUBLIC_OPERATORS.find(
+  const backup = operators.find(
     (operator) => operator.id !== preferred.id && operator.status === "active",
   );
   if (backup === undefined) throw new Error("A backup operator is unavailable.");

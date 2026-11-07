@@ -16,6 +16,10 @@ export interface OperatorConfiguration {
   readonly confirmationDepth: bigint;
   readonly healthPort: number;
   readonly expectedGenesisHash?: string;
+  readonly operatorName?: string;
+  readonly operatorPublicUrl?: string;
+  readonly automataApiUrl?: string;
+  readonly operatorServices?: readonly ("dao-harvest" | "deadline" | "recurring")[];
 }
 
 function url(value: string | undefined, name: string): string {
@@ -25,6 +29,58 @@ function url(value: string | undefined, name: string): string {
     throw new Error(`${name} must use http or https`);
   }
   return parsed.href;
+}
+
+function origin(value: string | undefined, name: string, httpsOnly = false): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  const parsed = new URL(value);
+  if (
+    (httpsOnly
+      ? parsed.protocol !== "https:"
+      : parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error(
+      `${name} must be an ${httpsOnly ? "HTTPS" : "HTTP(S)"} origin without credentials or a path`,
+    );
+  }
+  return parsed.origin;
+}
+
+function operatorName(value: string | undefined): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  const name = value.trim();
+  const hasControlCharacter = [...name].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code < 32 || code === 127;
+  });
+  if (name.length < 2 || name.length > 64 || hasControlCharacter) {
+    throw new Error("OPERATOR_NAME must contain 2 to 64 printable characters");
+  }
+  return name;
+}
+
+function operatorServices(
+  value: string | undefined,
+): readonly ("dao-harvest" | "deadline" | "recurring")[] | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const allowed = new Set(["dao-harvest", "deadline", "recurring"] as const);
+  const services = value.split(",").map((item) => item.trim());
+  if (
+    services.length < 1 ||
+    services.length > allowed.size ||
+    new Set(services).size !== services.length ||
+    services.some((service) => !allowed.has(service as "dao-harvest" | "deadline" | "recurring"))
+  ) {
+    throw new Error(
+      "OPERATOR_SERVICES must be a unique comma-separated list of dao-harvest, deadline, and recurring",
+    );
+  }
+  return Object.freeze(services.toSorted() as ("dao-harvest" | "deadline" | "recurring")[]);
 }
 
 function decimal(value: string | undefined, fallback: bigint, name: string): bigint {
@@ -66,6 +122,10 @@ export function parseOperatorConfiguration(
   if (transactionFee < 1n || transactionFee > 50_000n) {
     throw new Error("OPERATOR_TRANSACTION_FEE must be between 1 and 50000 shannons");
   }
+  const name = operatorName(input["OPERATOR_NAME"]);
+  const publicUrl = origin(input["OPERATOR_PUBLIC_URL"], "OPERATOR_PUBLIC_URL", true);
+  const apiUrl = origin(input["CKAUTOMATA_API_URL"], "CKAUTOMATA_API_URL");
+  const services = operatorServices(input["OPERATOR_SERVICES"]);
   return Object.freeze({
     rpcUrl: url(input["CKB_RPC_URL"], "CKB_RPC_URL"),
     indexerUrl: url(input["CKB_INDEXER_URL"], "CKB_INDEXER_URL"),
@@ -95,6 +155,10 @@ export function parseOperatorConfiguration(
     ),
     healthPort: port(input["OPERATOR_HEALTH_PORT"]),
     ...(expectedGenesisHash ? { expectedGenesisHash } : {}),
+    ...(name === undefined ? {} : { operatorName: name }),
+    ...(publicUrl === undefined ? {} : { operatorPublicUrl: publicUrl }),
+    ...(apiUrl === undefined ? {} : { automataApiUrl: apiUrl }),
+    ...(services === undefined ? {} : { operatorServices: services }),
   });
 }
 
@@ -112,5 +176,9 @@ export function publicOperatorConfiguration(config: OperatorConfiguration) {
     confirmationDepth: config.confirmationDepth.toString(),
     healthPort: config.healthPort,
     expectedGenesisHash: config.expectedGenesisHash ?? null,
+    operatorName: config.operatorName ?? null,
+    operatorPublicUrl: config.operatorPublicUrl ?? null,
+    automataApiUrl: config.automataApiUrl ?? null,
+    operatorServices: config.operatorServices ?? null,
   });
 }

@@ -63,6 +63,7 @@ test("repository migrations retain confirmation policy and register the harvest 
   const reviewRemediation = migrations.find(({ version }) => version === 18);
   const latest = migrations.at(-1);
   const harvestV2Projection = migrations.find(({ version }) => version === 20);
+  const operatorRegistry = migrations.find(({ version }) => version === 21);
 
   assert.equal(confirmations?.name, "testnet_confirmation_depth");
   assert.match(confirmations?.upSql ?? "", /confirmation_depth = 5/);
@@ -101,11 +102,14 @@ test("repository migrations retain confirmation policy and register the harvest 
     assert.match(sql, /f3e4e82e/);
     assert.match(sql, /10639e08/);
   }
-  assert.equal(latest?.version, 20);
+  assert.equal(latest?.version, 21);
   assert.equal(harvestV2Projection?.name, "dao_harvest_v2_projection");
   assert.match(harvestV2Projection?.upSql ?? "", /CREATE TABLE dao_harvest_v2_events/);
   assert.match(harvestV2Projection?.upSql ?? "", /CREATE TABLE dao_harvest_v2_jobs/);
   assert.match(harvestV2Projection?.downSql ?? "", /DROP TABLE IF EXISTS dao_harvest_v2_jobs/);
+  assert.equal(operatorRegistry?.name, "operator_registry");
+  assert.match(operatorRegistry?.upSql ?? "", /CREATE TABLE operator_registrations/);
+  assert.match(operatorRegistry?.downSql ?? "", /DROP TABLE IF EXISTS operator_registrations/);
 });
 
 test("rejects gaps and unpaired migration files", async () => {

@@ -23,6 +23,8 @@ export {
   type ApiJobQuote,
   type ApiJobTerms,
   type ApiNotificationPreferences,
+  type ApiOperatorList,
+  type ApiOperatorRegistration,
   type ApiQuery,
   type ApiRequestBody,
   type ApiSuccess,

@@ -1,6 +1,6 @@
 # CKAutomata external operator
 
-This package lets an independent operator process CKAutomata DAO Harvest, scheduled-payment, and recurring-payment jobs through public CKB testnet RPC and indexer endpoints. It does not use the CKAutomata API, database, Redis, or hosted executor credentials.
+This package lets an independent operator process CKAutomata DAO Harvest, scheduled-payment, and recurring-payment jobs through public CKB testnet RPC and indexer endpoints. Execution does not depend on the CKAutomata API, database, Redis, or hosted executor credentials. The optional registry command uses the public API only to publish the operator's verified name, address, services, and hosted endpoint.
 
 The user may choose a preferred operator. That operator can act at the scheduled time. If it does not act, another compatible operator can take over at the later block committed in the Job Cell. The contracts keep the recipient, amount, timing, DAO principal, redeposit, and service payment fixed.
 
@@ -122,6 +122,31 @@ For a continuously supervised health endpoint, set the private key in
 docker compose --file deploy/operator/compose.yml up --detach --build
 ```
 
+## Register the hosted operator
+
+Registration is optional. It makes a healthy operator available by name in CKAutomata's preferred-operator dropdown for new automations. It does not change existing jobs or their committed operator rules.
+
+Set these values before starting the public service:
+
+```env
+OPERATOR_NAME=Community Operator
+OPERATOR_PUBLIC_URL=https://operator.example
+CKAUTOMATA_API_URL=https://api.example
+OPERATOR_SERVICES=deadline,recurring
+```
+
+`OPERATOR_PUBLIC_URL` must be a public HTTPS origin. Route it to the operator health port through your hosting platform or TLS reverse proxy. Confirm that `GET /operator-info` and `GET /health/ready` return HTTP 200, then register:
+
+```powershell
+pnpm operator register
+```
+
+The command authenticates with the configured operator key through CKAutomata's single-use off-chain challenge. The API verifies that the hosted lock, CKB testnet genesis, manifest hashes, and capabilities match before adding the operator. It never receives the private key.
+
+The bundled operator can be listed for scheduled and recurring payments. Only add `dao-harvest` when the hosted runtime also implements preferred Harvest preparation; the bundled manual Harvest command currently handles permissionless fallback claims after takeover.
+
+Re-run `register` to refresh a changed name, endpoint, or capability list. Repeated health failures remove the operator from new dropdown choices without changing any automation that already exists on-chain.
+
 ## Monitoring and shutdown
 
 Run the health server separately when supervising the operator:
@@ -133,6 +158,7 @@ pnpm operator serve
 - readiness: `GET /health/ready`
 - liveness: `GET /health/live`
 - metrics: `GET /metrics`
+- public registry identity: `GET /operator-info`
 
 Before shutdown, stop starting new commands and retain every submitted transaction hash until it is committed or rejected. A submitted claim does not need this process to remain online, but confirmation must be checked before reusing funds or rebuilding work.
 

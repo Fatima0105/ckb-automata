@@ -50,6 +50,12 @@ import {
   TemplatesController,
 } from "./jobs.ts";
 import { NetworkMetadataController, NetworkMetadataService } from "./network-metadata.ts";
+import {
+  OperatorRegistryController,
+  OperatorRegistryMonitor,
+  OperatorRegistryService,
+  PostgresOperatorRegistryRepository,
+} from "./operators.ts";
 import { PendingCreationController, PendingCreationService } from "./pending-creations.ts";
 import {
   NotificationPreferencesController,
@@ -83,6 +89,7 @@ Module({
     WebhookController,
     MetricsController,
     NetworkMetadataController,
+    OperatorRegistryController,
     JobsController,
     AccountJobsController,
     TemplatesController,
@@ -155,6 +162,40 @@ export function createAppModule(environment: AutomataEnvironment): DynamicModule
         inject: [DatabaseClient],
         useFactory: (databaseClient: DatabaseClient) =>
           new AuthService(databaseClient.database, environment),
+      },
+      {
+        provide: OperatorRegistryService,
+        inject: [
+          DatabaseClient,
+          AuthService,
+          DAO_HARVEST_V2_DEPLOYMENT,
+          OPERATOR_AUTOMATION_DEPLOYMENT,
+        ],
+        useFactory: (
+          databaseClient: DatabaseClient,
+          auth: AuthService,
+          harvestDeployments: readonly VerifiedDaoHarvestV2Deployment[] | undefined,
+          paymentDeployment: OperatorAutomationDeployment | undefined,
+        ) =>
+          new OperatorRegistryService(
+            new PostgresOperatorRegistryRepository(databaseClient.database),
+            auth,
+            environment,
+            {
+              harvestManifestHashes: new Set(
+                (harvestDeployments ?? []).map(({ manifestSha256 }) => manifestSha256),
+              ),
+              ...(paymentDeployment === undefined
+                ? {}
+                : { paymentManifestSha256: paymentDeployment.manifestSha256 }),
+            },
+          ),
+      },
+      {
+        provide: OperatorRegistryMonitor,
+        inject: [OperatorRegistryService],
+        useFactory: (operators: OperatorRegistryService) =>
+          new OperatorRegistryMonitor(operators, environment.AUTOMATA_PROFILE === "testnet-public"),
       },
       {
         provide: NotificationPreferencesService,

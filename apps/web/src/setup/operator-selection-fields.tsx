@@ -1,21 +1,52 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
+import { createApiClient } from "@ckb-automata/api-client";
 import { SelectField } from "@ckb-automata/ui";
 
+import { browserWebEnvironment } from "../environment.ts";
 import type { SetupStepRenderContext } from "./setup-stepper.tsx";
 import {
   operatorDraftFields,
-  PUBLIC_OPERATORS,
+  mergePublicOperators,
+  registeredPublicOperators,
   selectedOperatorId,
+  type PublicOperator,
   type OperatorSelectionId,
 } from "./operator-directory.ts";
 
 export function OperatorSelectionFields({
   context,
 }: Readonly<{ context: SetupStepRenderContext }>) {
-  const selectedId = selectedOperatorId(context.draft);
+  const [registered, setRegistered] = useState<readonly PublicOperator[]>([]);
+  useEffect(() => {
+    let current = true;
+    let api;
+    try {
+      api = createApiClient({ baseUrl: browserWebEnvironment().apiUrl });
+    } catch {
+      setRegistered([]);
+      return () => {
+        current = false;
+      };
+    }
+    void api
+      .listOperators({ service: context.template })
+      .then((response) => {
+        if (current) setRegistered(registeredPublicOperators(response));
+      })
+      .catch(() => {
+        if (current) setRegistered([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [context.template]);
+  const operators = useMemo(() => mergePublicOperators(registered), [registered]);
+  const selectedId = selectedOperatorId(context.draft, operators);
   const selectOperator = (id: OperatorSelectionId) => {
-    for (const [name, value] of Object.entries(operatorDraftFields(id))) {
+    for (const [name, value] of Object.entries(operatorDraftFields(id, operators))) {
       context.setField(name, value);
     }
   };
@@ -37,7 +68,7 @@ export function OperatorSelectionFields({
         value={selectedId}
       >
         <option value="none">None</option>
-        {PUBLIC_OPERATORS.map((operator) => (
+        {operators.map((operator) => (
           <option key={operator.id} value={operator.id}>
             {operator.name} - Active
           </option>

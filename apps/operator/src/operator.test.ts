@@ -50,6 +50,7 @@ import { loadAutomationManifest, verifyAutomationManifest } from "./automation-m
 import { loadOperatorManifest, verifyOperatorManifest, type OperatorManifest } from "./manifest.ts";
 import type { JsonRpcClient } from "./rpc.ts";
 import { startOperatorServer } from "./server.ts";
+import { CKB_TESTNET_SECP256K1_BLAKE160_CODE_HASH } from "./registration.ts";
 import {
   dryRunFallbackClaim,
   submitFallbackClaim,
@@ -931,15 +932,84 @@ test("health server reports manifest readiness and Prometheus metrics", async ()
         OPERATOR_MANIFEST_PATH: fixture.path,
       }),
       healthPort: 0,
+      privateKey: `0x${"11".repeat(32)}`,
+      operatorName: "Community Operator",
+      operatorServices: ["dao-harvest"] as const,
+      expectedGenesisHash: hash("a"),
     };
     const server = await startOperatorServer({ config, manifest: loaded, rpc });
     try {
       const ready = await fetch(`http://127.0.0.1:${server.port}/health/ready`);
       assert.equal(ready.status, 200);
       assert.equal(((await ready.json()) as { status: string }).status, "ready");
+      const info = await fetch(`http://127.0.0.1:${server.port}/operator-info`);
+      assert.equal(info.status, 200);
+      const identity = (await info.json()) as {
+        name: string;
+        services: string[];
+        identity: { address: string; lockHash: string };
+      };
+      assert.equal(identity.name, "Community Operator");
+      assert.deepEqual(identity.services, ["dao-harvest"]);
+      assert.match(identity.identity.address, /^ckt1/);
+      assert.match(identity.identity.lockHash, /^0x[0-9a-f]{64}$/);
       const metrics = await fetch(`http://127.0.0.1:${server.port}/metrics`);
       assert.equal(metrics.status, 200);
       assert.match(await metrics.text(), /automata_rpc_errors_total/);
+    } finally {
+      await server.close();
+    }
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("payment-only hosts publish a verifiable operator identity", async () => {
+  const fixture = await automationManifestFixture();
+  try {
+    const automationManifest = await loadAutomationManifest(fixture.path);
+    const byOutPoint = new Map<string, Uint8Array>(
+      Object.values(fixture.contracts).map((item) => [
+        item.value.cellDep.outPoint.txHash,
+        item.binary,
+      ]),
+    );
+    const rpc = new RpcFixture({
+      get_block_hash: hash("a"),
+      get_live_cell: (params: readonly unknown[]) => {
+        const outPoint = params[0] as { tx_hash: string };
+        return {
+          status: "live",
+          cell: { data: { content: bytesToHex(byOutPoint.get(outPoint.tx_hash)!) } },
+        };
+      },
+    });
+    const config = {
+      ...parseOperatorConfiguration({
+        CKB_RPC_URL: "https://rpc.example/",
+        CKB_INDEXER_URL: "https://indexer.example/",
+        OPERATOR_AUTOMATION_MANIFEST_PATH: fixture.path,
+      }),
+      healthPort: 0,
+      privateKey: `0x${"22".repeat(32)}`,
+      operatorName: "Payment Operator",
+      operatorServices: ["deadline", "recurring"] as const,
+      expectedGenesisHash: hash("a"),
+    };
+    const server = await startOperatorServer({ config, automationManifest, rpc });
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/operator-info`);
+      assert.equal(response.status, 200);
+      const info = (await response.json()) as {
+        services: string[];
+        identity: { lock: { codeHash: string; hashType: string; args: string } };
+      };
+      assert.deepEqual(info.services, ["deadline", "recurring"]);
+      assert.deepEqual(info.identity.lock, {
+        codeHash: CKB_TESTNET_SECP256K1_BLAKE160_CODE_HASH,
+        hashType: "type",
+        args: `0x${blake160(new ECPair(config.privateKey).publicKey, "hex")}`,
+      });
     } finally {
       await server.close();
     }

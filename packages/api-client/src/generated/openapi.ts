@@ -546,6 +546,41 @@ export type paths = {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/v1/operators": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** List verified active external operators */
+        readonly get: operations["OperatorRegistryController_list"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/v1/operators/registration": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        /** Register or refresh an authenticated external operator */
+        readonly put: operations["OperatorRegistryController_register"];
+        readonly post?: never;
+        /** Remove the authenticated external operator */
+        readonly delete: operations["OperatorRegistryController_remove"];
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/v1/preferences": {
         readonly parameters: {
             readonly query?: never;
@@ -2858,6 +2893,107 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    readonly OperatorRegistryController_list: {
+        readonly parameters: {
+            readonly query?: {
+                readonly service?: "dao-harvest" | "deadline" | "recurring";
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": {
+                        readonly operators: readonly {
+                            readonly address: string;
+                            readonly id: string;
+                            readonly lockHash: string;
+                            readonly name: string;
+                            readonly services: readonly ("dao-harvest" | "deadline" | "recurring")[];
+                            /** @enum {string} */
+                            readonly status: "active";
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    readonly OperatorRegistryController_register: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": {
+                    /** Format: uri */
+                    readonly endpoint: string;
+                };
+            };
+        };
+        readonly responses: {
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": {
+                        readonly address: string;
+                        readonly id: string;
+                        readonly lockHash: string;
+                        readonly name: string;
+                        readonly services: readonly ("dao-harvest" | "deadline" | "recurring")[];
+                        /** @enum {string} */
+                        readonly status: "active";
+                    };
+                };
+            };
+            /** @description The endpoint, identity, network, or manifests are invalid */
+            readonly 400: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The wallet session is invalid */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly OperatorRegistryController_remove: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": {
+                        /** @enum {boolean} */
+                        readonly removed: true;
+                    };
+                };
             };
         };
     };

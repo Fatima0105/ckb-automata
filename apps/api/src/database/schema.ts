@@ -738,6 +738,65 @@ export const authSessions = pgTable(
   ],
 );
 
+export const operatorRegistrations = pgTable(
+  "operator_registrations",
+  {
+    networkId: varchar("network_id", { length: 64 })
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    lockHash: hash("lock_hash").notNull(),
+    displayName: varchar("display_name", { length: 64 }).notNull(),
+    address: varchar("address", { length: 128 }).notNull(),
+    endpoint: varchar("endpoint", { length: 512 }).notNull(),
+    services: jsonb("services").$type<readonly string[]>().notNull(),
+    harvestManifestSha256: varchar("harvest_manifest_sha256", { length: 64 }),
+    paymentManifestSha256: varchar("payment_manifest_sha256", { length: 64 }),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.networkId, table.lockHash] }),
+    uniqueIndex("operator_registrations_network_endpoint_uq").on(table.networkId, table.endpoint),
+    index("operator_registrations_active_idx").on(
+      table.networkId,
+      table.status,
+      table.displayName,
+      table.lockHash,
+    ),
+    index("operator_registrations_health_idx").on(table.status, table.lastCheckedAt),
+    check("operator_registrations_lock_hash_ck", sql`${table.lockHash} ~ '^0x[0-9a-f]{64}$'`),
+    check(
+      "operator_registrations_name_ck",
+      sql`length(${table.displayName}) BETWEEN 2 AND 64 AND ${table.displayName} !~ '[[:cntrl:]]'`,
+    ),
+    check("operator_registrations_address_ck", sql`${table.address} ~ '^ckt1[0-9a-z]{20,124}$'`),
+    check("operator_registrations_endpoint_ck", sql`${table.endpoint} ~ '^https://[^/?#]+$'`),
+    check(
+      "operator_registrations_services_ck",
+      sql`jsonb_typeof(${table.services}) = 'array' AND jsonb_array_length(${table.services}) BETWEEN 1 AND 3 AND ${table.services} <@ '["dao-harvest", "deadline", "recurring"]'::jsonb`,
+    ),
+    check(
+      "operator_registrations_harvest_manifest_ck",
+      sql`${table.harvestManifestSha256} IS NULL OR ${table.harvestManifestSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "operator_registrations_payment_manifest_ck",
+      sql`${table.paymentManifestSha256} IS NULL OR ${table.paymentManifestSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check("operator_registrations_status_ck", sql`${table.status} IN ('active', 'offline')`),
+    check("operator_registrations_failures_ck", sql`${table.consecutiveFailures} >= 0`),
+    check(
+      "operator_registrations_health_time_ck",
+      sql`${table.lastSeenAt} <= ${table.lastCheckedAt}`,
+    ),
+    check("operator_registrations_update_time_ck", sql`${table.updatedAt} >= ${table.createdAt}`),
+  ],
+);
+
 export const deadLetters = pgTable(
   "dead_letters",
   {
@@ -841,6 +900,7 @@ export const schema = {
   networks,
   notificationPreferences,
   notificationSubscriptions,
+  operatorRegistrations,
   scriptDeployments,
   transactionAttempts,
   webhookDeliveries,

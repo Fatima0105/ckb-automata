@@ -3272,6 +3272,131 @@
         "tags": ["NetworkMetadata"]
       }
     },
+    "/v1/operators": {
+      "get": {
+        "operationId": "OperatorRegistryController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "service",
+            "required": false,
+            "schema": { "enum": ["dao-harvest", "deadline", "recurring"], "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operators": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "address": { "pattern": "^ckt1[0-9a-z]{20,124}$", "type": "string" },
+                          "id": { "type": "string" },
+                          "lockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                          "name": { "maxLength": 64, "minLength": 2, "type": "string" },
+                          "services": {
+                            "items": {
+                              "enum": ["dao-harvest", "deadline", "recurring"],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "status": { "enum": ["active"], "type": "string" }
+                        },
+                        "required": ["id", "name", "address", "lockHash", "services", "status"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": ["operators"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "List verified active external operators",
+        "tags": ["operators"]
+      }
+    },
+    "/v1/operators/registration": {
+      "delete": {
+        "operationId": "OperatorRegistryController_remove",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": { "removed": { "enum": [true], "type": "boolean" } },
+                  "required": ["removed"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [{ "bearer": [] }],
+        "summary": "Remove the authenticated external operator",
+        "tags": ["operators"]
+      },
+      "put": {
+        "operationId": "OperatorRegistryController_register",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": { "endpoint": { "format": "uri", "type": "string" } },
+                "required": ["endpoint"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "address": { "pattern": "^ckt1[0-9a-z]{20,124}$", "type": "string" },
+                    "id": { "type": "string" },
+                    "lockHash": { "pattern": "^0x[0-9a-f]{64}$", "type": "string" },
+                    "name": { "maxLength": 64, "minLength": 2, "type": "string" },
+                    "services": {
+                      "items": {
+                        "enum": ["dao-harvest", "deadline", "recurring"],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "status": { "enum": ["active"], "type": "string" }
+                  },
+                  "required": ["id", "name", "address", "lockHash", "services", "status"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": { "description": "The endpoint, identity, network, or manifests are invalid" },
+          "401": { "description": "The wallet session is invalid" }
+        },
+        "security": [{ "bearer": [] }],
+        "summary": "Register or refresh an authenticated external operator",
+        "tags": ["operators"]
+      }
+    },
     "/v1/preferences": {
       "delete": {
         "operationId": "NotificationPreferencesController_reset",

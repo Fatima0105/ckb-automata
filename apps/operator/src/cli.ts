@@ -10,6 +10,7 @@ import { loadAutomationManifest, verifyAutomationManifest } from "./automation-m
 import { loadOperatorManifest, verifyOperatorManifest } from "./manifest.ts";
 import { PublicJsonRpcClient } from "./rpc.ts";
 import { startOperatorServer } from "./server.ts";
+import { registerHostedOperator } from "./registration.ts";
 import {
   confirmTransaction,
   dryRunFallbackClaim,
@@ -24,8 +25,9 @@ import {
   writeExecutionBundle,
 } from "./workflow.ts";
 import { buildPaymentExecutionBundle, writePaymentExecutionBundle } from "./payment-workflow.ts";
+import { OPERATOR_PACKAGE_VERSION } from "./version.ts";
 
-const PACKAGE_VERSION = "0.3.0";
+const PACKAGE_VERSION = OPERATOR_PACKAGE_VERSION;
 
 function jobOutPoint(value: string | undefined) {
   if (!value) throw new Error("--job-out-point is required");
@@ -59,6 +61,7 @@ function guide() {
       "submit --bundle <file>",
       "confirm --tx-hash <hash>",
       "serve",
+      "register (publish this hosted operator to CKAutomata)",
     ],
     shutdown: [
       "Stop accepting new work before shutdown.",
@@ -133,6 +136,19 @@ export async function runOperatorCli(
             payments: await verifyAutomationManifest(automation, rpc, config.expectedGenesisHash),
           }),
     });
+    return 0;
+  }
+  if (command === "register") {
+    if (loaded === undefined && automation === undefined) {
+      throw new Error("a Harvest or payment manifest is required to register an operator");
+    }
+    if (loaded !== undefined) {
+      await verifyOperatorManifest(loaded, rpc, config.expectedGenesisHash);
+    }
+    if (automation !== undefined) {
+      await verifyAutomationManifest(automation, rpc, config.expectedGenesisHash);
+    }
+    output(await registerHostedOperator(config, loaded));
     return 0;
   }
   if (command === "discover") {

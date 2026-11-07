@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 
 import { parseHash32, parseOutputIndex } from "@ckb-automata/core";
+import { AutomataMetrics } from "@ckb-automata/telemetry";
 
 import { parseOperatorConfiguration, publicOperatorConfiguration } from "./config.ts";
 import { discoverHarvestV2Jobs } from "./discovery.ts";
@@ -26,6 +27,7 @@ import {
 } from "./workflow.ts";
 import { buildPaymentExecutionBundle, writePaymentExecutionBundle } from "./payment-workflow.ts";
 import { OPERATOR_PACKAGE_VERSION } from "./version.ts";
+import { createOperatorWatcher } from "./watcher.ts";
 
 const PACKAGE_VERSION = OPERATOR_PACKAGE_VERSION;
 
@@ -61,6 +63,7 @@ function guide() {
       "submit --bundle <file>",
       "confirm --tx-hash <hash>",
       "serve",
+      "watch",
       "register (publish this hosted operator to CKAutomata)",
     ],
     shutdown: [
@@ -250,19 +253,53 @@ export async function runOperatorCli(
     );
     return 0;
   }
-  if (command === "serve") {
+  if (command === "serve" || command === "watch") {
+    const metrics = new AutomataMetrics();
+    const watcher = createOperatorWatcher(
+      {
+        config,
+        rpc,
+        indexer,
+        ...(loaded === undefined ? {} : { manifest: loaded }),
+        ...(automation === undefined ? {} : { automationManifest: automation }),
+      },
+      {
+        metrics,
+        log(event, fields) {
+          process.stdout.write(`${JSON.stringify({ event, ...fields })}\n`);
+        },
+      },
+    );
+    if (command === "watch") {
+      await watcher.start();
+      output({ status: "watching", version: PACKAGE_VERSION });
+      await new Promise<void>((resolve) => {
+        const stop = () => void watcher.close().then(resolve);
+        process.once("SIGINT", stop);
+        process.once("SIGTERM", stop);
+      });
+      return 0;
+    }
     const server = await startOperatorServer({
       config,
       ...(loaded === undefined ? {} : { manifest: loaded }),
       ...(automation === undefined ? {} : { automationManifest: automation }),
       rpc,
+      metrics,
+      watcher,
     });
-    output({ status: "ready", port: server.port, version: PACKAGE_VERSION });
-    await new Promise<void>((resolve) => {
-      const stop = () => void server.close().then(resolve);
-      process.once("SIGINT", stop);
-      process.once("SIGTERM", stop);
-    });
+    try {
+      await watcher.start();
+      output({ status: "ready", port: server.port, version: PACKAGE_VERSION });
+      await new Promise<void>((resolve) => {
+        const stop = () => resolve();
+        process.once("SIGINT", stop);
+        process.once("SIGTERM", stop);
+      });
+    } finally {
+      await watcher.close();
+      await server.close();
+    }
     return 0;
   }
   throw new Error(`unknown command: ${command}`);

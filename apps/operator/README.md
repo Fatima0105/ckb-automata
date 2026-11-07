@@ -2,16 +2,16 @@
 
 This package lets an independent operator host a public CKAutomata identity and process supported CKB testnet automations.
 
-Hosting has two separate parts:
+The hosted operator runs two supervised parts:
 
-1. `serve` keeps a public identity, readiness, and metrics endpoint online so CKAutomata can verify and list the operator.
-2. The execution commands discover, build, dry-run, submit, and confirm transactions.
+1. A public identity, readiness, and metrics endpoint so CKAutomata can verify and list the operator.
+2. A continuous watcher that discovers, builds, dry-runs, submits, and confirms eligible transactions.
 
-The bundled `serve` command does **not** automatically submit transactions. Hosting and registration make the operator selectable; the operator must still run the execution commands or operate a separate scheduler that invokes them safely.
+The `serve` command starts both parts automatically. The manual execution commands remain available for diagnosis and controlled recovery.
 
 ## What can be advertised
 
-The bundled operator supports scheduled and recurring payments as a preferred operator and as a later takeover operator.
+The bundled watcher supports scheduled and recurring payments as a preferred operator and as a later takeover operator. It can also submit eligible permissionless DAO Harvest fallback claims.
 
 Use this default capability list:
 
@@ -19,7 +19,7 @@ Use this default capability list:
 OPERATOR_SERVICES=deadline,recurring
 ```
 
-Do not advertise `dao-harvest` merely because the CLI can claim an eligible Harvest fallback. A preferred DAO Harvest operator must also run the preparation step at the right time. The bundled manual Harvest flow currently covers permissionless fallback claims after takeover.
+Do not advertise `dao-harvest` merely because the watcher can claim an eligible Harvest fallback. A preferred DAO Harvest operator must also run the preparation step at the right time. The bundled watcher currently covers permissionless fallback claims after takeover.
 
 Existing automations are never rewritten by registration, removal, downtime, or a name change. Their operator rules remain the rules committed when they were created.
 
@@ -53,6 +53,12 @@ OPERATOR_PUBLIC_URL=https://your-public-operator.example
 CKAUTOMATA_API_URL=https://ckb-automata-api.onrender.com
 OPERATOR_SERVICES=deadline,recurring
 OPERATOR_PRIVATE_KEY=0xYOUR_TESTNET_PRIVATE_KEY
+OPERATOR_WATCHER_ENABLED=true
+OPERATOR_WATCHER_POLL_INTERVAL_MS=10000
+OPERATOR_WATCHER_RETRY_BASE_MS=15000
+OPERATOR_WATCHER_RETRY_MAXIMUM_MS=900000
+OPERATOR_WATCHER_CONFIRMATION_TIMEOUT_MS=1800000
+OPERATOR_WATCHER_MAXIMUM_JOBS_PER_SCAN=100
 ```
 
 `OPERATOR_HEALTH_PORT` is platform-specific:
@@ -175,7 +181,13 @@ docker compose --file deploy/operator/compose.yml logs --follow operator
 
 Then verify the four public endpoints and run `pnpm operator register` from a trusted machine.
 
-## Process transactions
+## Automatic execution
+
+`serve` continuously scans CKB, executes eligible work one transaction at a time, tracks submitted transactions to the configured confirmation depth, suppresses duplicate submissions while an indexer catches up, and applies bounded per-job retry backoff after contention or temporary failures.
+
+The readiness response includes watcher state. Metrics include discovered jobs, ready jobs, attempts, confirmations, and RPC failures.
+
+## Process transactions manually
 
 Hosting alone does not process a job. Use a fresh discovery result for each attempt:
 

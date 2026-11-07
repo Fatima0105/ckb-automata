@@ -11,10 +11,15 @@ import { verifyAutomationManifest } from "./automation-manifest.ts";
 import type { JsonRpcClient } from "./rpc.ts";
 import { operatorIdentityLock } from "./registration.ts";
 import { OPERATOR_PACKAGE_VERSION } from "./version.ts";
+import type { OperatorWatcherSnapshot } from "./watcher.ts";
 
 export interface OperatorServer {
   readonly port: number;
   close(): Promise<void>;
+}
+
+interface WatcherStatusSource {
+  snapshot(): OperatorWatcherSnapshot;
 }
 
 function close(server: Server): Promise<void> {
@@ -28,8 +33,10 @@ export async function startOperatorServer(options: {
   readonly manifest?: LoadedOperatorManifest;
   readonly automationManifest?: LoadedAutomationManifest;
   readonly rpc: JsonRpcClient;
+  readonly metrics?: AutomataMetrics;
+  readonly watcher?: WatcherStatusSource;
 }): Promise<OperatorServer> {
-  const metrics = new AutomataMetrics();
+  const metrics = options.metrics ?? new AutomataMetrics();
   let ready = false;
   let lastError: string | null = null;
   const refresh = async () => {
@@ -80,18 +87,22 @@ export async function startOperatorServer(options: {
       return;
     }
     if (request.url === "/health/ready") {
-      response.writeHead(ready ? 200 : 503, {
+      const watcher = options.watcher?.snapshot();
+      const watcherReady =
+        watcher === undefined || watcher.status === "running" || watcher.status === "disabled";
+      response.writeHead(ready && watcherReady ? 200 : 503, {
         "content-type": "application/json",
         "cache-control": "no-store",
       });
       response.end(
         JSON.stringify({
-          status: ready ? "ready" : "not_ready",
+          status: ready && watcherReady ? "ready" : "not_ready",
           manifests: {
             harvest: options.manifest?.sha256 ?? null,
             payments: options.automationManifest?.sha256 ?? null,
           },
           lastError,
+          watcher: watcher ?? null,
         }),
       );
       return;
@@ -146,6 +157,7 @@ export async function startOperatorServer(options: {
             harvest: options.manifest?.sha256 ?? null,
             payments: options.automationManifest?.sha256 ?? null,
           },
+          watcher: options.watcher?.snapshot() ?? null,
         }),
       );
       return;

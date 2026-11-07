@@ -15,11 +15,40 @@ export interface OperatorConfiguration {
   readonly transactionFee: bigint;
   readonly confirmationDepth: bigint;
   readonly healthPort: number;
+  readonly watcherEnabled: boolean;
+  readonly watcherPollIntervalMs: number;
+  readonly watcherRetryBaseMs: number;
+  readonly watcherRetryMaximumMs: number;
+  readonly watcherConfirmationTimeoutMs: number;
+  readonly watcherMaximumJobsPerScan: number;
   readonly expectedGenesisHash?: string;
   readonly operatorName?: string;
   readonly operatorPublicUrl?: string;
   readonly automataApiUrl?: string;
   readonly operatorServices?: readonly ("dao-harvest" | "deadline" | "recurring")[];
+}
+
+function boolean(value: string | undefined, fallback: boolean, name: string): boolean {
+  if (value === undefined || value === "") return fallback;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`${name} must be true or false`);
+}
+
+function boundedInteger(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  name: string,
+): number {
+  if (value === undefined || value === "") return fallback;
+  if (!/^[1-9][0-9]*$/.test(value)) throw new Error(`${name} must be a positive integer`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${name} must be between ${minimum} and ${maximum}`);
+  }
+  return parsed;
 }
 
 function url(value: string | undefined, name: string): string {
@@ -154,6 +183,42 @@ export function parseOperatorConfiguration(
       "OPERATOR_CONFIRMATION_DEPTH",
     ),
     healthPort: port(input["OPERATOR_HEALTH_PORT"]),
+    watcherEnabled: boolean(input["OPERATOR_WATCHER_ENABLED"], true, "OPERATOR_WATCHER_ENABLED"),
+    watcherPollIntervalMs: boundedInteger(
+      input["OPERATOR_WATCHER_POLL_INTERVAL_MS"],
+      10_000,
+      1_000,
+      300_000,
+      "OPERATOR_WATCHER_POLL_INTERVAL_MS",
+    ),
+    watcherRetryBaseMs: boundedInteger(
+      input["OPERATOR_WATCHER_RETRY_BASE_MS"],
+      15_000,
+      1_000,
+      300_000,
+      "OPERATOR_WATCHER_RETRY_BASE_MS",
+    ),
+    watcherRetryMaximumMs: boundedInteger(
+      input["OPERATOR_WATCHER_RETRY_MAXIMUM_MS"],
+      900_000,
+      1_000,
+      3_600_000,
+      "OPERATOR_WATCHER_RETRY_MAXIMUM_MS",
+    ),
+    watcherConfirmationTimeoutMs: boundedInteger(
+      input["OPERATOR_WATCHER_CONFIRMATION_TIMEOUT_MS"],
+      1_800_000,
+      60_000,
+      86_400_000,
+      "OPERATOR_WATCHER_CONFIRMATION_TIMEOUT_MS",
+    ),
+    watcherMaximumJobsPerScan: boundedInteger(
+      input["OPERATOR_WATCHER_MAXIMUM_JOBS_PER_SCAN"],
+      100,
+      1,
+      100,
+      "OPERATOR_WATCHER_MAXIMUM_JOBS_PER_SCAN",
+    ),
     ...(expectedGenesisHash ? { expectedGenesisHash } : {}),
     ...(name === undefined ? {} : { operatorName: name }),
     ...(publicUrl === undefined ? {} : { operatorPublicUrl: publicUrl }),
@@ -175,6 +240,12 @@ export function publicOperatorConfiguration(config: OperatorConfiguration) {
     transactionFee: config.transactionFee.toString(),
     confirmationDepth: config.confirmationDepth.toString(),
     healthPort: config.healthPort,
+    watcherEnabled: config.watcherEnabled,
+    watcherPollIntervalMs: config.watcherPollIntervalMs,
+    watcherRetryBaseMs: config.watcherRetryBaseMs,
+    watcherRetryMaximumMs: config.watcherRetryMaximumMs,
+    watcherConfirmationTimeoutMs: config.watcherConfirmationTimeoutMs,
+    watcherMaximumJobsPerScan: config.watcherMaximumJobsPerScan,
     expectedGenesisHash: config.expectedGenesisHash ?? null,
     operatorName: config.operatorName ?? null,
     operatorPublicUrl: config.operatorPublicUrl ?? null,

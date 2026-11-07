@@ -31,7 +31,7 @@
     "executor:verify:contention:local": "node scripts/verify-executor-contention-local.mjs",
     "executor:diagnose:eligibility": "node scripts/diagnose-executor-eligibility.mjs",
     "executor:diagnose:build": "node scripts/diagnose-executor-build.mjs",
-    "operator": "pnpm --filter @ckb-automata/operator start --",
+    "operator": "node apps/operator/dist/cli.js",
     "indexer:verify:checkpoints:local": "node scripts/verify-checkpoints-local.mjs",
     "indexer:verify:discovery:local": "node scripts/verify-job-discovery-local.mjs",
     "indexer:verify:transitions:local": "node scripts/verify-job-transitions-local.mjs",
